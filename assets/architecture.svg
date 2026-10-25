@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 560" width="960" height="560" font-family="Helvetica, Arial, sans-serif">
+  <title>Contact-State Reuse pipeline: data, models, evaluation and analysis</title>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#52514e"/>
+    </marker>
+    <style>
+      .box{fill:#ffffff;stroke:#8a8984;stroke-width:1.4;rx:10}
+      .hdr{font-size:15px;font-weight:700;fill:#0b0b0b}
+      .txt{font-size:12px;fill:#3a3936}
+      .small{font-size:11px;fill:#52514e}
+      .ln{stroke:#52514e;stroke-width:1.6;fill:none;marker-end:url(#arr)}
+      .dash{stroke:#e34948;stroke-width:1.4;fill:none;stroke-dasharray:6 4}
+    </style>
+  </defs>
+  <rect width="960" height="560" fill="#fcfcfb"/>
+
+  <!-- column 1: simulation -->
+  <rect class="box" x="20" y="40" width="220" height="190" rx="10"/>
+  <rect x="20" y="40" width="220" height="8" fill="#2a78d6"/>
+  <text class="hdr" x="34" y="72">ContactInsertionEnv</text>
+  <text class="txt" x="34" y="94">MuJoCo, planar peg (x, z, angle)</text>
+  <text class="txt" x="34" y="112">PD set-point + compliance action</text>
+  <text class="txt" x="34" y="130">domains: source, friction,</text>
+  <text class="txt" x="34" y="146">tight clearance, sensor noise,</text>
+  <text class="txt" x="34" y="162">occlusion, mixed (+ severity)</text>
+  <text class="txt" x="34" y="184">sensor models: force noise,</text>
+  <text class="txt" x="34" y="200">bias, delay, dropout; occlusion</text>
+
+  <rect class="box" x="20" y="260" width="220" height="110" rx="10"/>
+  <rect x="20" y="260" width="220" height="8" fill="#eda100"/>
+  <text class="hdr" x="34" y="292">Scripted oracle</text>
+  <text class="txt" x="34" y="314">privileged slot pose + true wrench</text>
+  <text class="txt" x="34" y="332">nominal and perturbed variants</text>
+  <text class="small" x="34" y="352">data generation only</text>
+
+  <!-- column 2: data -->
+  <rect class="box" x="290" y="40" width="200" height="330" rx="10"/>
+  <rect x="290" y="40" width="200" height="8" fill="#1baf7a"/>
+  <text class="hdr" x="304" y="72">Trajectory dataset</text>
+  <text class="txt" x="304" y="96">policy-visible</text>
+  <text class="small" x="314" y="114">exteroception [4]</text>
+  <text class="small" x="314" y="130">proprioception [7]</text>
+  <text class="small" x="314" y="146">force [3]</text>
+  <text class="small" x="314" y="162">previous action [4]</text>
+  <text class="txt" x="304" y="192">analysis labels only</text>
+  <text class="small" x="314" y="210">contact_mode 0..5</text>
+  <text class="small" x="314" y="226">first_contact, success, jam</text>
+  <text class="small" x="314" y="242">depth, true force norm</text>
+  <line class="dash" x1="300" y1="176" x2="480" y2="176"/>
+  <text class="small" x="304" y="276">.npz + meta.json, validated</text>
+  <text class="small" x="304" y="292">paired seeds across domains</text>
+  <text class="small" x="304" y="308">episode-level splits</text>
+
+  <!-- column 3: models -->
+  <rect class="box" x="540" y="40" width="200" height="330" rx="10"/>
+  <rect x="540" y="40" width="200" height="8" fill="#6250d6"/>
+  <text class="hdr" x="554" y="72">Models (~60k params)</text>
+  <text class="txt" x="554" y="96">fusion encoder</text>
+  <text class="small" x="564" y="112">per-modality embed + LayerNorm</text>
+  <text class="small" x="564" y="128">modality masks for ablation</text>
+  <text class="txt" x="554" y="152">ReactivePolicy (no memory)</text>
+  <text class="txt" x="554" y="172">SequencePolicy (GRU / TF)</text>
+  <text class="txt" x="554" y="192">PredictiveContactWorldModel</text>
+  <text class="small" x="564" y="210">latent z_t, heads:</text>
+  <text class="small" x="564" y="226">action (BC)</text>
+  <text class="small" x="564" y="242">next observation</text>
+  <text class="small" x="564" y="258">future force mean, log-var</text>
+  <text class="small" x="564" y="274">contact mode (opt-in, sim labels)</text>
+  <text class="small" x="554" y="306">L = action + l_obs obs</text>
+  <text class="small" x="564" y="322">+ l_force force + l_contact contact</text>
+
+  <!-- column 4: evaluation + analysis -->
+  <rect class="box" x="790" y="40" width="150" height="170" rx="10"/>
+  <rect x="790" y="40" width="150" height="8" fill="#eb6834"/>
+  <text class="hdr" x="802" y="72">Evaluation</text>
+  <text class="small" x="802" y="94">closed-loop rollouts</text>
+  <text class="small" x="802" y="110">shifted domains</text>
+  <text class="small" x="802" y="126">force corruption:</text>
+  <text class="small" x="812" y="142">zero, noise, bias, delay,</text>
+  <text class="small" x="812" y="158">first-contact window</text>
+  <text class="small" x="812" y="174">vs random window</text>
+  <text class="small" x="802" y="196">success, peak force</text>
+
+  <rect class="box" x="790" y="230" width="150" height="190" rx="10"/>
+  <rect x="790" y="230" width="150" height="8" fill="#008300"/>
+  <text class="hdr" x="802" y="262">Representation</text>
+  <text class="hdr" x="802" y="280">analysis</text>
+  <text class="small" x="802" y="302">episode-grouped probes</text>
+  <text class="small" x="802" y="318">cross-domain decoding</text>
+  <text class="small" x="802" y="334">linear CKA + null</text>
+  <text class="small" x="802" y="350">reuse score</text>
+  <text class="small" x="802" y="366">latent feature ablation</text>
+  <text class="small" x="802" y="382">PCA (descriptive)</text>
+  <text class="small" x="802" y="404">reuse vs adaptation</text>
+
+  <!-- arrows -->
+  <path class="ln" d="M130 230 L130 258"/>
+  <path class="ln" d="M240 135 L288 135"/>
+  <path class="ln" d="M240 315 L288 315"/>
+  <path class="ln" d="M490 120 L538 120"/>
+  <path class="ln" d="M740 120 L788 120"/>
+  <path class="ln" d="M740 300 L788 300"/>
+  <path class="ln" d="M490 225 C 560 470, 720 470, 788 405"/>
+  <text class="small" x="560" y="462">labels go to analysis, never to the policy</text>
+  <path class="ln" d="M865 210 L865 228"/>
+
+  <text class="small" x="20" y="522">Self-supervised: next observation, future force.  Simulator-supervised auxiliary: contact mode (explicitly marked configs).  Privileged oracle: scripted expert.</text>
+  <text class="small" x="20" y="544">Simulation only. Findings do not establish real-robot transfer.</text>
+</svg>

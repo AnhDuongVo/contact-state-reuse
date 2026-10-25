@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+# generated data, runs and logs (regenerate with the scripts)
+data/
+outputs/
+logs/
+*.pt

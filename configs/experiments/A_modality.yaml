@@ -1,0 +1,43 @@
+# Experiment A: does force help, at matched capacity, and where?
+# Every condition has ~60k parameters (param_budget) and the same data,
+# optimiser and number of updates.
+experiment: A_modality
+kind: conditions
+output_root: outputs
+seeds: [0, 1, 2]
+data:
+  dir: data/experiments
+  n_train: 400
+  seed: 0
+  p_perturbed: 0.2
+  dart_sigma: 0.1
+model_defaults:
+  param_budget: 60000
+  core: gru
+train:
+  steps: 3000
+  batch_episodes: 32
+  lr: 0.001
+  log_every: 250
+conditions:
+  - {name: reactive_EP, model: {kind: reactive, modalities: [extero, proprio]}}
+  - {name: reactive_EPF, model: {kind: reactive, modalities: [extero, proprio, force]}}
+  - {name: sequence_EP, model: {kind: sequence, modalities: [extero, proprio]}}
+  - {name: sequence_EPF, model: {kind: sequence, modalities: [extero, proprio, force]}}
+  # world model without force anywhere (no force input, no force target)
+  - {name: world_model_EP, model: {kind: world_model, modalities: [extero, proprio], lambda_force: 0.0}}
+  - {name: world_model_EPF, model: {kind: world_model, modalities: [extero, proprio, force]}}
+comparisons:
+  - [reactive_EPF, reactive_EP]
+  - [sequence_EPF, sequence_EP]
+  - [world_model_EPF, world_model_EP]
+eval:
+  domains: [source, shifted_friction, tight_clearance, sensor_noise, occlusion]
+  n_episodes: 100
+  seed: 123
+  contact_auroc: true
+quick:
+  seeds: [0]
+  data: {n_train: 120}
+  train: {steps: 300, batch_episodes: 16, log_every: 100}
+  eval: {n_episodes: 20}

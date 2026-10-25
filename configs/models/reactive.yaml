@@ -1,0 +1,3 @@
+kind: reactive
+modalities: [extero, proprio, force]
+param_budget: 60000

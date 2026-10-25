@@ -1,0 +1,4 @@
+kind: sequence
+modalities: [extero, proprio, force]
+core: gru
+param_budget: 60000

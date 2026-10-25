@@ -1,0 +1,10 @@
+# Self-supervised predictive model (default): next observation + future force.
+kind: world_model
+modalities: [extero, proprio, force]
+core: gru
+param_budget: 60000
+force_horizon: 5
+lambda_obs: 1.0
+lambda_force: 1.0
+lambda_contact: 0.0
+contact_supervision: false

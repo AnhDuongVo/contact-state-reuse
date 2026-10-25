@@ -1,0 +1,21 @@
+# `make demo`: a tiny end-to-end run (target: a few minutes on a laptop CPU).
+# Results from this configuration are a pipeline check, not evidence.
+experiment: demo
+output_root: outputs
+seed: 0
+data:
+  dir: data/demo
+  n_train: 60
+  n_analysis: 24
+model_defaults:
+  param_budget: 40000
+  core: gru
+train:
+  steps: 200
+  batch_episodes: 16
+  lr: 0.001
+  log_every: 50
+eval:
+  domains: [source, tight_clearance]
+  n_episodes: 10
+  seed: 123

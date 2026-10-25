@@ -1,0 +1,10 @@
+# SIMULATOR-SUPERVISED AUXILIARY: adds future contact-mode prediction using
+# simulator-defined labels. Labels are a training target only, never an input.
+kind: world_model
+modalities: [extero, proprio, force]
+core: gru
+param_budget: 60000
+lambda_obs: 1.0
+lambda_force: 1.0
+lambda_contact: 0.5
+contact_supervision: true

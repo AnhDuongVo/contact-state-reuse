@@ -1,0 +1,37 @@
+# Experiment C: does force matter specifically around first contact?
+# Force readings are zeroed for `window` steps starting at first contact, or
+# for an equally long window at a random time (matched control), or for the
+# whole episode. Paired over identical evaluation episodes.
+experiment: C_force_timing
+kind: force_timing
+output_root: outputs
+seeds: [0, 1, 2]
+data:
+  dir: data/experiments
+  n_train: 400
+  seed: 0
+  p_perturbed: 0.2
+  dart_sigma: 0.1
+model_defaults:
+  param_budget: 60000
+  core: gru
+  modalities: [extero, proprio, force]
+train:
+  steps: 3000
+  batch_episodes: 32
+  lr: 0.001
+  log_every: 250
+conditions:
+  - {name: sequence_EPF, model: {kind: sequence}}
+  - {name: world_model_EPF, model: {kind: world_model}}
+eval:
+  domains: [source, tight_clearance]
+  n_episodes: 100
+  seed: 123
+  window: 6
+  random_max_start: 80
+quick:
+  seeds: [0]
+  data: {n_train: 120}
+  train: {steps: 300, batch_episodes: 16, log_every: 100}
+  eval: {n_episodes: 30}

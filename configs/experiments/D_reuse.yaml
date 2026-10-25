@@ -1,0 +1,51 @@
+# Experiment D: representation reuse and adaptation under graded shifts.
+# Pre-train on source, measure phase-conditioned latent similarity to paired
+# shifted-domain trajectories (reuse score), fine-tune with small budgets, and
+# relate reuse to adaptation efficiency across (model, seed, severity).
+experiment: D_reuse
+kind: reuse
+output_root: outputs
+seeds: [0, 1, 2]
+data:
+  dir: data/experiments
+  n_train: 400
+  n_analysis: 80
+  seed: 0
+  analysis_seed: 777
+  finetune_seed: 555
+  p_perturbed: 0.2
+  dart_sigma: 0.1
+model_defaults:
+  param_budget: 60000
+  core: gru
+  modalities: [extero, proprio, force]
+train:
+  steps: 3000
+  batch_episodes: 32
+  lr: 0.001
+  log_every: 250
+conditions:
+  - {name: sequence_bc, model: {kind: sequence}}
+  - {name: wm_selfsup, model: {kind: world_model, lambda_obs: 1.0, lambda_force: 1.0}}
+  # SIMULATOR-SUPERVISED AUXILIARY
+  - {name: wm_contactsup, model: {kind: world_model, lambda_obs: 1.0, lambda_force: 1.0, lambda_contact: 0.5, contact_supervision: true}}
+reuse:
+  shift: tight_clearance
+  severities: [0.33, 0.67, 1.0]
+  budgets: [5, 10, 20, 40]
+  finetune_steps: 500
+  finetune_lr: 0.0003
+  n_perm: 100
+  n_boot: 500
+eval:
+  n_episodes: 50
+  seed: 123
+quick:
+  seeds: [0, 1]
+  data: {n_train: 120, n_analysis: 40}
+  train: {steps: 300, batch_episodes: 16, log_every: 100}
+  conditions:
+    - {name: sequence_bc, model: {kind: sequence}}
+    - {name: wm_selfsup, model: {kind: world_model, lambda_obs: 1.0, lambda_force: 1.0}}
+  reuse: {severities: [0.5, 1.0], budgets: [5, 20], finetune_steps: 150, n_perm: 30, n_boot: 100}
+  eval: {n_episodes: 20}

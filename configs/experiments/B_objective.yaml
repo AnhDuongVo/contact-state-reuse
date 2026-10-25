@@ -1,0 +1,40 @@
+# Experiment B: objective ablation at matched capacity, all with full inputs.
+experiment: B_objective
+kind: conditions
+output_root: outputs
+seeds: [0, 1, 2]
+data:
+  dir: data/experiments
+  n_train: 400
+  seed: 0
+  p_perturbed: 0.2
+  dart_sigma: 0.1
+model_defaults:
+  param_budget: 60000
+  core: gru
+  modalities: [extero, proprio, force]
+train:
+  steps: 3000
+  batch_episodes: 32
+  lr: 0.001
+  log_every: 250
+conditions:
+  - {name: sequence_bc, model: {kind: sequence}}
+  - {name: wm_obs, model: {kind: world_model, lambda_obs: 1.0, lambda_force: 0.0}}
+  - {name: wm_obs_force, model: {kind: world_model, lambda_obs: 1.0, lambda_force: 1.0}}
+  # SIMULATOR-SUPERVISED AUXILIARY (uses contact-mode labels as a training target)
+  - {name: wm_obs_force_contactsup, model: {kind: world_model, lambda_obs: 1.0, lambda_force: 1.0, lambda_contact: 0.5, contact_supervision: true}}
+comparisons:
+  - [wm_obs, sequence_bc]
+  - [wm_obs_force, wm_obs]
+  - [wm_obs_force_contactsup, wm_obs_force]
+eval:
+  domains: [source, shifted_friction, tight_clearance, sensor_noise, occlusion]
+  n_episodes: 100
+  seed: 123
+  contact_auroc: true
+quick:
+  seeds: [0]
+  data: {n_train: 120}
+  train: {steps: 300, batch_episodes: 16, log_every: 100}
+  eval: {n_episodes: 20}

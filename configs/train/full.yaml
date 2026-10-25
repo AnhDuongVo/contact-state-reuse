@@ -1,0 +1,7 @@
+steps: 3000
+batch_episodes: 32
+lr: 0.001
+weight_decay: 0.0001
+val_fraction: 0.15
+log_every: 250
+device: auto

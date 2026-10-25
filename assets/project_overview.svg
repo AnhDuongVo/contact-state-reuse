@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 380" width="960" height="380" font-family="Helvetica, Arial, sans-serif">
+  <title>Project overview: from representation reuse in neuroscience to contact-state reuse in robot learning</title>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#52514e"/>
+    </marker>
+    <style>
+      .h{font-size:16px;font-weight:700;fill:#0b0b0b}
+      .t{font-size:12.5px;fill:#3a3936}
+      .s{font-size:11px;fill:#52514e}
+    </style>
+  </defs>
+  <rect width="960" height="380" fill="#fcfcfb"/>
+
+  <!-- left: neuroscience -->
+  <rect x="20" y="20" width="420" height="200" rx="12" fill="#ffffff" stroke="#8a8984"/>
+  <text class="h" x="36" y="50">Neuroscience question</text>
+  <text class="t" x="36" y="74">When task rules change, is population activity</text>
+  <text class="t" x="36" y="92">reorganised from scratch or reused?</text>
+  <!-- two rings of points: context A and B with same geometry -->
+  <g transform="translate(110,150)">
+    <circle r="38" fill="none" stroke="#b9b8b2" stroke-dasharray="3 3"/>
+    <circle cx="-30" cy="-20" r="6" fill="#2a78d6"/><circle cx="28" cy="-22" r="6" fill="#eb6834"/>
+    <circle cx="30" cy="22" r="6" fill="#1baf7a"/><circle cx="-28" cy="24" r="6" fill="#eda100"/>
+    <text class="s" x="-30" y="58">rule A</text>
+  </g>
+  <g transform="translate(300,150)">
+    <circle r="38" fill="none" stroke="#b9b8b2" stroke-dasharray="3 3"/>
+    <circle cx="-24" cy="-28" r="6" fill="#2a78d6"/><circle cx="32" cy="-14" r="6" fill="#eb6834"/>
+    <circle cx="24" cy="28" r="6" fill="#1baf7a"/><circle cx="-32" cy="16" r="6" fill="#eda100"/>
+    <text class="s" x="-30" y="58">rule B</text>
+  </g>
+  <path d="M160 150 L246 150" stroke="#52514e" stroke-width="1.5" marker-end="url(#a)"/>
+  <text class="s" x="168" y="140">same geometry?</text>
+
+  <!-- right: robotics -->
+  <rect x="520" y="20" width="420" height="200" rx="12" fill="#ffffff" stroke="#8a8984"/>
+  <text class="h" x="536" y="50">Robot-learning question</text>
+  <text class="t" x="536" y="74">When contact physics change (tighter fit, more</text>
+  <text class="t" x="536" y="92">friction), are latent contact states reused?</text>
+  <g transform="translate(610,150)">
+    <circle r="38" fill="none" stroke="#b9b8b2" stroke-dasharray="3 3"/>
+    <circle cx="-30" cy="-20" r="6" fill="#9ec5f4"/><circle cx="28" cy="-22" r="6" fill="#eb6834"/>
+    <circle cx="30" cy="22" r="6" fill="#eda100"/><circle cx="-28" cy="24" r="6" fill="#2a78d6"/>
+    <text class="s" x="-26" y="58">source</text>
+  </g>
+  <g transform="translate(800,150)">
+    <circle r="38" fill="none" stroke="#b9b8b2" stroke-dasharray="3 3"/>
+    <circle cx="-24" cy="-28" r="6" fill="#9ec5f4"/><circle cx="32" cy="-14" r="6" fill="#eb6834"/>
+    <circle cx="24" cy="28" r="6" fill="#eda100"/><circle cx="-32" cy="16" r="6" fill="#2a78d6"/>
+    <text class="s" x="-36" y="58">tight clearance</text>
+  </g>
+  <path d="M660 150 L746 150" stroke="#52514e" stroke-width="1.5" marker-end="url(#a)"/>
+  <text class="s" x="668" y="140">reuse score (CKA)</text>
+
+  <path d="M440 120 L518 120" stroke="#52514e" stroke-width="1.5" marker-end="url(#a)"/>
+  <text class="s" x="446" y="110">same tools</text>
+
+  <!-- phase strip -->
+  <text class="h" x="20" y="262">Simulator-defined phase labels (analysis only)</text>
+  <g font-size="12" fill="#0b0b0b">
+    <rect x="20" y="280" width="140" height="34" rx="6" fill="#cde2fb"/><text x="34" y="302">0 approach</text>
+    <rect x="170" y="280" width="140" height="34" rx="6" fill="#f7c9b4"/><text x="184" y="302">1 first contact</text>
+    <rect x="320" y="280" width="140" height="34" rx="6" fill="#f8deaa"/><text x="334" y="302">2 alignment</text>
+    <rect x="470" y="280" width="140" height="34" rx="6" fill="#b7d3f6"/><text x="484" y="302">3 insertion</text>
+    <rect x="620" y="280" width="140" height="34" rx="6" fill="#bfe3bf"/><text x="634" y="302">4 success</text>
+    <rect x="770" y="280" width="170" height="34" rx="6" fill="#f6c6c6"/><text x="784" y="302">5 jam or failure</text>
+  </g>
+  <text class="s" x="20" y="340">Labels are a measurement convention for decoding and similarity analysis. They are never given to the policy and do not imply that real contact phases are discrete.</text>
+  <text class="s" x="20" y="358">A similar analysis does not imply a similar mechanism.</text>
+</svg>

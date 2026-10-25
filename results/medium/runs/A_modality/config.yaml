@@ -1,0 +1,81 @@
+experiment: A_modality
+kind: conditions
+output_root: outputs
+seeds:
+- 0
+- 1
+- 2
+data:
+  dir: data/experiments
+  n_train: 300
+  seed: 0
+  p_perturbed: 0.2
+  dart_sigma: 0.1
+model_defaults:
+  param_budget: 60000
+  core: gru
+train:
+  steps: 1500
+  batch_episodes: 16
+  lr: 0.001
+  log_every: 250
+conditions:
+- name: reactive_EP
+  model:
+    kind: reactive
+    modalities:
+    - extero
+    - proprio
+- name: reactive_EPF
+  model:
+    kind: reactive
+    modalities:
+    - extero
+    - proprio
+    - force
+- name: sequence_EP
+  model:
+    kind: sequence
+    modalities:
+    - extero
+    - proprio
+- name: sequence_EPF
+  model:
+    kind: sequence
+    modalities:
+    - extero
+    - proprio
+    - force
+- name: world_model_EP
+  model:
+    kind: world_model
+    modalities:
+    - extero
+    - proprio
+    lambda_force: 0.0
+- name: world_model_EPF
+  model:
+    kind: world_model
+    modalities:
+    - extero
+    - proprio
+    - force
+comparisons:
+- - reactive_EPF
+  - reactive_EP
+- - sequence_EPF
+  - sequence_EP
+- - world_model_EPF
+  - world_model_EP
+eval:
+  domains:
+  - source
+  - shifted_friction
+  - tight_clearance
+  - sensor_noise
+  - occlusion
+  n_episodes: 50
+  seed: 123
+  contact_auroc: true
+_scale: medium
+_source: configs/experiments/A_modality.yaml

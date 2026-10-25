@@ -60,6 +60,8 @@ class Exteroception:
         d = rng.normal(size=2)
         d /= np.linalg.norm(d) + 1e-12
         self.offset = np.array([*(d * params.extero_bias), 0.0])
+        if params.search_offset > 0:  # drawn only here, so other domains keep their random streams
+            self.offset[0] += params.search_offset * (1.0 if rng.random() < 0.5 else -1.0)
         self.last: np.ndarray | None = None
 
     def __call__(self, rel_true: np.ndarray) -> tuple[np.ndarray, float]:

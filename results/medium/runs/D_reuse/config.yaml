@@ -1,0 +1,64 @@
+experiment: D_reuse
+kind: reuse
+output_root: outputs
+seeds:
+- 0
+- 1
+- 2
+data:
+  dir: data/experiments
+  n_train: 300
+  n_analysis: 60
+  seed: 0
+  analysis_seed: 777
+  finetune_seed: 555
+  p_perturbed: 0.2
+  dart_sigma: 0.1
+model_defaults:
+  param_budget: 60000
+  core: gru
+  modalities:
+  - extero
+  - proprio
+  - force
+train:
+  steps: 1500
+  batch_episodes: 16
+  lr: 0.001
+  log_every: 250
+conditions:
+- name: sequence_bc
+  model:
+    kind: sequence
+- name: wm_selfsup
+  model:
+    kind: world_model
+    lambda_obs: 1.0
+    lambda_force: 1.0
+- name: wm_contactsup
+  model:
+    kind: world_model
+    lambda_obs: 1.0
+    lambda_force: 1.0
+    lambda_contact: 0.5
+    contact_supervision: true
+reuse:
+  shift: tight_clearance
+  severities:
+  - 0.33
+  - 0.67
+  - 1.0
+  budgets:
+  - 5
+  - 10
+  - 20
+  - 40
+  finetune_steps: 300
+  finetune_lr: 0.0003
+  n_perm: 50
+  n_boot: 300
+eval:
+  n_episodes: 40
+  seed: 123
+_scale: medium
+_source: configs/experiments/D_reuse.yaml

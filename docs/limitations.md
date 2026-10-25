@@ -12,8 +12,10 @@
 
 * **No hardware validation.** Nothing here establishes real-robot transfer.
 * **Limited diversity.** One task family and a handful of physical shifts. Reuse across genuinely different tasks is untested.
-* **Fixed demonstrator.** All demonstrations come from one scripted expert and its perturbed variants. Policies can only learn strategies that expert shows, and the expert uses privileged state that the policy does not have.
-* **Small models and data.** About 60k parameters and hundreds of demonstrations; conclusions may change at foundation-model scale.
+* **Scripted demonstrators.** The main data come from a scripted expert with privileged state; v0.2 adds a non-privileged variant and a search variant. All three are state machines with similar strategies; human demonstrations would be more varied.
+* **Strong scripted baseline.** The non-privileged scripted controller is better than every learned policy on these tasks when the sensor is healthy. The experiments compare learned policies with each other.
+* **Small models and data.** About 60k parameters and hundreds of demonstrations; conclusions may change at foundation-model scale. The auxiliary-loss benefit in particular may shrink with more data.
+* **Five seeds and limited tuning.** Intervals include training-run variation but remain wide for unstable conditions; only the learning rate was varied systematically.
 * **Correlation, not causation.** The reuse/adaptation analysis relates two measured quantities across conditions that share models and seeds. A positive association would be consistent with reuse helping adaptation but would not show it.
 * **Latent feature ablation** clamps dimensions of a trained network. Redundancy means a null effect does not show the information is unused, and a large effect does not identify a mechanism.
 

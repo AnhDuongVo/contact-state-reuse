@@ -1,0 +1,35 @@
+# Experiment T (v0.2): when does the trained policy use force? Evaluation only,
+# on the checkpoints of experiment E (5 seeds). The force reading is removed
+# for 6 steps (0.3 s) at different times relative to first contact, or kept
+# only in the onset window; "hold_onset" freezes the last pre-contact reading
+# instead of zeroing it. Fixed-compliance runs replace the compliance command.
+# Scaling the force reading by 0.5 or 2 tests sensitivity to force magnitude.
+experiment: T_timing
+kind: timing_v2
+source_run: outputs/E_factorial_medium/run1
+seeds: [0, 1, 2, 3, 4]
+conditions: [obs_F_ftgt, obs_F, bc_F, bc, obs_ftgt, bc_F_lr3e-4, obs_F_ftgt_lr3e-4]
+corruptions:
+  - {mode: none}
+  - {mode: first_contact_window, window: 6}
+  - {mode: onset_offset_window, window: 6, offset: 6}
+  - {mode: onset_offset_window, window: 6, offset: 12}
+  - {mode: onset_offset_window, window: 6, offset: 24}
+  - {mode: random_window, window: 6, random_max_start: 80}
+  - {mode: onset_only, window: 6}
+  - {mode: hold_onset, window: 6}
+  - {mode: zero}
+  # force magnitude sensitivity (whole episode)
+  - {mode: scale, magnitude: 0.5}
+  - {mode: scale, magnitude: 2.0}
+compliance_overrides: [-0.5, 0.5]
+eval:
+  domains: [source, tight_clearance]
+  n_episodes: 60
+  seed: 123
+medium: {}
+quick:
+  source_run: outputs/E_factorial_quick/run1
+  seeds: [0]
+  conditions: [obs_F_ftgt, bc_F]
+  eval: {n_episodes: 4}

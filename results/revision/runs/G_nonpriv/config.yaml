@@ -1,0 +1,89 @@
+experiment: G_nonpriv
+kind: conditions
+output_root: outputs
+seeds:
+- 0
+- 1
+- 2
+- 3
+- 4
+data:
+  dir: data/experiments
+  n_train: 300
+  seed: 0
+  p_perturbed: 0.2
+  dart_sigma: 0.1
+  expert:
+    privileged: false
+    aim_error: 0.001
+model_defaults:
+  kind: world_model
+  hidden: 66
+  param_budget: 0
+  core: gru
+  lambda_obs: 0.0
+  lambda_force: 0.0
+  modalities:
+  - extero
+  - proprio
+  - force
+train:
+  steps: 1500
+  batch_episodes: 16
+  lr: 0.001
+  log_every: 100
+  episode_filter: success
+conditions:
+- name: bc
+  model:
+    modalities:
+    - extero
+    - proprio
+- name: bc_F
+  model: {}
+- name: obs
+  model:
+    lambda_obs: 1.0
+    modalities:
+    - extero
+    - proprio
+- name: obs_F_ftgt
+  model:
+    lambda_obs: 1.0
+    lambda_force: 1.0
+- name: obs_ftgt
+  model:
+    lambda_obs: 1.0
+    lambda_force: 1.0
+    modalities:
+    - extero
+    - proprio
+- name: bc_lr3e-4
+  model:
+    modalities:
+    - extero
+    - proprio
+  train:
+    lr: 0.0003
+- name: bc_F_lr3e-4
+  model: {}
+  train:
+    lr: 0.0003
+- name: obs_F_ftgt_lr3e-4
+  model:
+    lambda_obs: 1.0
+    lambda_force: 1.0
+  train:
+    lr: 0.0003
+eval:
+  domains:
+  - source
+  - shifted_friction
+  - tight_clearance
+  - sensor_noise
+  - occlusion
+  n_episodes: 50
+  seed: 123
+  contact_auroc: true
+_scale: medium
+_source: configs/experiments/G_nonpriv.yaml

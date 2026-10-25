@@ -1,0 +1,43 @@
+# Experiment R (v0.2, exploratory): representation stability and adaptation
+# under a shift that lowers zero-shot success but that the demonstrator still
+# solves: a large lateral error of the pose estimate ("search", 5 to 9 mm at
+# severity 1), which requires sliding along the top face to find the opening.
+# Pretrained models come from experiment E. Adaptation is measured as the gain
+# over zero-shot success; a source-domain fine-tuning run and two learning
+# rates on the original tight-clearance shift test the fine-tuning procedure.
+experiment: R_reuse
+kind: reuse_v2
+source_run: outputs/E_factorial_medium/run1
+seeds: [0, 1, 2, 3, 4]
+conditions: [bc_F, obs_F, obs_F_ftgt, bc_F_lr3e-4]
+data: {dir: data/experiments, n_analysis: 60, analysis_seed: 777, finetune_seed: 555, p_perturbed: 0.2, dart_sigma: 0.1}
+train: {steps: 1500, batch_episodes: 16, lr: 0.001, log_every: 100, episode_filter: success}
+reuse:
+  shift: search
+  severities: [0.5, 0.75, 1.0]
+  analysis_expert: {privileged: false, search: true, aim_error: 0.001}
+  n_perm: 50
+  n_boot: 200
+  threshold: 0.9
+  probe_severities: [1.0]
+  probe_stride: 2
+  finetune:
+    - {name: search, expert: {privileged: false, search: true, aim_error: 0.001}, budgets: [5, 10, 20, 40], steps: 300, lr: 0.0003}
+    - {name: source_ctrl, domain: source, severities: [1.0], budgets: [5, 20, 40], steps: 300, lr: 0.0003}
+    - {name: tight_lr3e-4, domain: tight_clearance, severities: [1.0], budgets: [5, 10, 20, 40], steps: 300, lr: 0.0003, eval_domains: [tight_clearance, source], conditions: [obs_F_ftgt, bc_F_lr3e-4]}
+    - {name: tight_lr1e-4, domain: tight_clearance, severities: [1.0], budgets: [5, 10, 20, 40], steps: 300, lr: 0.0001, eval_domains: [tight_clearance, source], conditions: [obs_F_ftgt, bc_F_lr3e-4]}
+eval: {n_episodes: 40, seed: 123}
+medium: {}
+quick:
+  source_run: outputs/E_factorial_quick/run1
+  seeds: [0]
+  conditions: [bc_F, obs_F_ftgt]
+  data: {n_analysis: 12}
+  reuse:
+    severities: [1.0]
+    n_perm: 5
+    n_boot: 5
+    finetune:
+      - {name: search, expert: {privileged: false, search: true, aim_error: 0.001}, budgets: [5], steps: 10, lr: 0.0003}
+      - {name: source_ctrl, domain: source, severities: [1.0], budgets: [5], steps: 10, lr: 0.0003}
+  eval: {n_episodes: 4}

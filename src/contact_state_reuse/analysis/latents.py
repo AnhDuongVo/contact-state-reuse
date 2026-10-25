@@ -99,3 +99,43 @@ def align(lat: LatentSet, event: str, before: int, after: int) -> tuple[np.ndarr
         keep = (r >= -before) & (r <= after)
         out[i, r[keep] + before] = lat.z[m][keep]
     return out, eps
+
+
+def reference_latents(data: TrajectoryData, kind: str, normalizer: Normalizer | None = None) -> LatentSet:
+    """Reference "representations" with the same rows and labels as ``extract_latents``.
+
+    obs       standardised observation vector (all modalities)
+    proprio   standardised proprioception only
+    progress  time step and time since first contact (task progress clock)
+
+    ``normalizer`` standardises the observations (fit on ``data`` if None).
+    """
+    a = data.arrays
+    rows = np.arange(len(a["t"]))
+    if normalizer is None:
+        normalizer = Normalizer.fit(a["obs"])
+    ep = a["episode_id"][rows]
+    t = a["t"][rows].astype(np.float64)
+    first = np.full(data.n_episodes, np.nan)
+    fc_rows = np.flatnonzero(a["first_contact"])
+    first[a["episode_id"][fc_rows]] = a["t"][fc_rows]
+    tf = t - first[ep]
+    if kind == "obs":
+        z = normalizer(a["obs"])
+    elif kind == "proprio":
+        z = normalizer(a["obs"])[:, data.layout["proprio"]]
+    elif kind == "progress":
+        z = np.stack([t, np.nan_to_num(np.clip(tf, -40, 160), nan=-40.0)], 1)
+    else:
+        raise ValueError(f"unknown reference {kind!r}")
+    return LatentSet(
+        z=np.asarray(z, np.float32),
+        episode=ep,
+        t=t,
+        mode=a["contact_mode"][rows].astype(int),
+        force_norm=a["contact_force_norm"][rows],
+        success=a["ep_success"][ep],
+        domain=a["ep_domain"][ep],
+        t_from_first_contact=tf,
+        t_to_end=t - a["ep_length"][ep],
+    )

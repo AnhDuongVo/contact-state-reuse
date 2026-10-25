@@ -1,0 +1,14 @@
+# Exact versions used for the v0.2.0 results (CPU only, Linux x86_64, Python 3.13.16).
+# Install with: pip install -r requirements-lock.txt && pip install -e . --no-deps
+mujoco==3.16.0
+gymnasium==1.4.0
+torch==2.14.1
+numpy==2.5.3
+scipy==1.18.1
+scikit-learn==1.9.1
+pandas==3.0.5
+matplotlib==3.11.2
+pyyaml==6.0.3
+imageio==2.38.0
+tabulate==0.10.0
+markdown==3.11

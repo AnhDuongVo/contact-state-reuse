@@ -10,3 +10,36 @@ data/
 outputs/
 logs/
 *.pt
+# data files (never pushed; regenerate with the scripts)
+*.csv
+*.tsv
+*.npz
+*.npy
+*.parquet
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+*.json
+*.xlsx
+*.xls
+*.feather
+*.arrow
+# images and videos
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.mp4
+*.mov
+*.avi
+*.webm
+# archives
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+# white paper folder: only the white paper PDF is pushed
+docs/whitepaper/*
+!docs/whitepaper/whitepaper.pdf

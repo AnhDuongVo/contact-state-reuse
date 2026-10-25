@@ -1,0 +1,14 @@
+# Experiment L (v0.2): coordinate-wise latent ablation on every seed of E.
+experiment: L_ablation
+kind: ablation
+source_run: outputs/E_factorial_medium/run1
+seeds: [0, 1, 2, 3, 4]
+conditions: [obs_F_ftgt, bc_F, bc_F_lr3e-4]
+data: {dir: data/experiments, n_analysis: 60, analysis_seed: 777, p_perturbed: 0.2, dart_sigma: 0.1}
+ablation: {domains: [source, tight_clearance], n_episodes: 40, fraction: 0.25, n_random: 3}
+eval: {seed: 123}
+medium: {}
+quick:
+  source_run: outputs/E_factorial_quick/run1
+  seeds: [0]
+  ablation: {n_episodes: 4, domains: [source]}

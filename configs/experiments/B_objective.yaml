@@ -33,6 +33,12 @@ eval:
   n_episodes: 100
   seed: 123
   contact_auroc: true
+# medium: the scale used for the white paper (3 seeds; about 2 hours for all
+# experiments on 2 CPU cores). full: larger, for a lab machine.
+medium:
+  data: {n_train: 300}
+  train: {steps: 1500, batch_episodes: 16, log_every: 250}
+  eval: {n_episodes: 50}
 quick:
   seeds: [0]
   data: {n_train: 120}

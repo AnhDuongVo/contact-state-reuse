@@ -1,0 +1,220 @@
+experiment: E_factorial
+kind: conditions
+output_root: outputs
+seeds:
+- 0
+- 1
+- 2
+- 3
+- 4
+data:
+  dir: data/experiments
+  n_train: 300
+  seed: 0
+  p_perturbed: 0.2
+  dart_sigma: 0.1
+model_defaults:
+  kind: world_model
+  hidden: 66
+  param_budget: 0
+  core: gru
+  lambda_obs: 0.0
+  lambda_force: 0.0
+  modalities:
+  - extero
+  - proprio
+  - force
+train:
+  steps: 1500
+  batch_episodes: 16
+  lr: 0.001
+  log_every: 100
+  episode_filter: success
+conditions:
+- name: bc
+  model:
+    modalities:
+    - extero
+    - proprio
+- name: bc_F
+  model: {}
+- name: ftgt
+  model:
+    lambda_force: 1.0
+    modalities:
+    - extero
+    - proprio
+- name: F_ftgt
+  model:
+    lambda_force: 1.0
+- name: obs
+  model:
+    lambda_obs: 1.0
+    modalities:
+    - extero
+    - proprio
+- name: obs_F
+  model:
+    lambda_obs: 1.0
+- name: obs_ftgt
+  model:
+    lambda_obs: 1.0
+    lambda_force: 1.0
+    modalities:
+    - extero
+    - proprio
+- name: obs_F_ftgt
+  model:
+    lambda_obs: 1.0
+    lambda_force: 1.0
+  eval_corruptions:
+  - mode: delay
+    delay: 4
+  - mode: bias
+    magnitude: 3.0
+  - mode: noise
+    magnitude: 3.0
+- name: bc_F_alldata
+  model: {}
+  train:
+    episode_filter: all
+- name: obs_F_alldata
+  model:
+    lambda_obs: 1.0
+  train:
+    episode_filter: all
+- name: obs_F_ftgt_alldata
+  model:
+    lambda_obs: 1.0
+    lambda_force: 1.0
+  train:
+    episode_filter: all
+- name: recon_F
+  model:
+    lambda_recon: 1.0
+- name: obs_F_ftgt_stopgrad
+  model:
+    lambda_obs: 1.0
+    lambda_force: 1.0
+    aux_stopgrad: true
+- name: obs_F_ftgt_sepcore
+  model:
+    lambda_obs: 1.0
+    lambda_force: 1.0
+    aux_core: true
+- name: obs_F_ftgt_w0.1
+  model:
+    lambda_obs: 0.1
+    lambda_force: 0.1
+- name: obs_F_ftgt_w0.3
+  model:
+    lambda_obs: 0.3
+    lambda_force: 0.3
+- name: obs_F_ftgt_w3
+  model:
+    lambda_obs: 3.0
+    lambda_force: 3.0
+- name: obs_F_ftgt_aug
+  model:
+    lambda_obs: 1.0
+    lambda_force: 1.0
+  train:
+    force_aug: 1.0
+  eval_corruptions:
+  - mode: delay
+    delay: 4
+  - mode: bias
+    magnitude: 3.0
+  - mode: noise
+    magnitude: 3.0
+- name: bc_F_aug
+  model: {}
+  train:
+    force_aug: 1.0
+  eval_corruptions:
+  - mode: delay
+    delay: 4
+  - mode: bias
+    magnitude: 3.0
+  - mode: noise
+    magnitude: 3.0
+- name: bc_F_lr3e-4
+  model: {}
+  train:
+    lr: 0.0003
+- name: bc_F_lr1e-4
+  model: {}
+  train:
+    lr: 0.0001
+- name: bc_lr3e-4
+  model:
+    modalities:
+    - extero
+    - proprio
+  train:
+    lr: 0.0003
+- name: obs_ftgt_lr3e-4
+  model:
+    lambda_obs: 1.0
+    lambda_force: 1.0
+    modalities:
+    - extero
+    - proprio
+  train:
+    lr: 0.0003
+- name: obs_F_ftgt_lr3e-4
+  model:
+    lambda_obs: 1.0
+    lambda_force: 1.0
+  train:
+    lr: 0.0003
+- name: bc_F_long
+  model: {}
+  train:
+    steps: 3000
+- name: bc_F_noprev
+  model:
+    use_prev_action: false
+- name: bc_noprev
+  model:
+    use_prev_action: false
+    modalities:
+    - extero
+    - proprio
+- name: obs_F_ftgt_noprev
+  model:
+    lambda_obs: 1.0
+    lambda_force: 1.0
+    use_prev_action: false
+- name: bc_F_log
+  model:
+    force_transform: log
+- name: bc_F_binary
+  model:
+    force_transform: binary
+- name: bc_F_dart0
+  model: {}
+  data:
+    dart_sigma: 0.0
+- name: bc_dart0
+  model:
+    modalities:
+    - extero
+    - proprio
+  data:
+    dart_sigma: 0.0
+- name: bc_F_wide
+  model:
+    hidden: 94
+eval:
+  domains:
+  - source
+  - shifted_friction
+  - tight_clearance
+  - sensor_noise
+  - occlusion
+  n_episodes: 50
+  seed: 123
+  contact_auroc: true
+_scale: medium
+_source: configs/experiments/E_factorial.yaml

@@ -20,7 +20,19 @@ from ..envs.expert import ExpertConfig, ScriptedExpert
 from ..envs.insertion_env import ContactInsertionEnv, EnvConfig
 from ..utils.seeding import derive_seed
 
-CORRUPTION_MODES = ("none", "zero", "noise", "bias", "delay", "first_contact_window", "random_window")
+CORRUPTION_MODES = (
+    "none",
+    "zero",
+    "noise",
+    "bias",
+    "delay",
+    "scale",
+    "first_contact_window",
+    "onset_offset_window",
+    "onset_only",
+    "hold_onset",
+    "random_window",
+)
 
 
 @dataclass(frozen=True)
@@ -39,6 +51,17 @@ class ForceCorruption:
     random_window         same-length zero window starting at a uniformly
                           random step in [0, ``random_max_start``); whether it
                           overlapped first contact is recorded per episode
+    scale                 reading multiplied by ``magnitude`` for the whole episode
+    onset_offset_window   zero window starting ``offset`` steps after first
+                          contact (later-contact control for the onset window)
+    onset_only            force kept only in the onset window, zeroed everywhere else
+    hold_onset            during the onset window the last pre-contact reading is
+                          held instead of zeroed (a "stale" rather than "zero" reading)
+
+    For every episode the harness records how many steps were actually masked
+    (``masked_steps``; 0 if the episode ended before the window) and the
+    summed magnitude of the readings that were removed (``masked_force``), so
+    windows can be compared by the amount of force signal they removed.
     """
 
     mode: str = "none"
@@ -46,6 +69,7 @@ class ForceCorruption:
     magnitude: float = 2.0
     delay: int = 3
     random_max_start: int = 80
+    offset: int = 0
 
     def __post_init__(self) -> None:
         if self.mode not in CORRUPTION_MODES:
@@ -53,7 +77,11 @@ class ForceCorruption:
 
     @property
     def name(self) -> str:
-        return self.mode if self.mode in ("none", "zero") else f"{self.mode}"
+        if self.mode == "onset_offset_window":
+            return f"onset+{self.offset}"
+        if self.mode == "scale":
+            return f"scale{self.magnitude:g}"
+        return self.mode
 
 
 class _CorruptionState:
@@ -64,6 +92,14 @@ class _CorruptionState:
         if spec.mode == "random_window":
             self.window_start = int(rng.integers(0, spec.random_max_start))
         self.first_contact_step: int | None = None
+        self.masked_steps = 0
+        self.masked_force = 0.0
+        self.last_pre_contact: np.ndarray | None = None
+
+    def _mask(self, f: np.ndarray, value: np.ndarray | float = 0.0) -> None:
+        self.masked_steps += 1
+        self.masked_force += float(np.hypot(f[0], f[1]))
+        f[:] = value
 
     def apply(self, obs: np.ndarray, t: int, first_contact_now: bool) -> np.ndarray:
         s = self.spec
@@ -73,10 +109,23 @@ class _CorruptionState:
         f = o[self.sl]
         if first_contact_now and self.first_contact_step is None:
             self.first_contact_step = t
-            if s.mode == "first_contact_window":
+            if s.mode in ("first_contact_window", "hold_onset", "onset_only"):
                 self.window_start = t
+            elif s.mode == "onset_offset_window":
+                self.window_start = t + s.offset
+        in_window = self.window_start is not None and self.window_start <= t < self.window_start + s.window
         if s.mode == "zero":
-            f[:] = 0.0
+            self._mask(f)
+        elif s.mode == "scale":
+            f *= s.magnitude
+        elif s.mode == "onset_only":
+            if not in_window:
+                self._mask(f)
+        elif s.mode == "hold_onset":
+            if in_window and self.last_pre_contact is not None:
+                self._mask(f, self.last_pre_contact)
+            elif self.first_contact_step is None:
+                self.last_pre_contact = f.copy()
         elif s.mode == "noise":
             f += self.rng.normal(size=3) * np.array([s.magnitude, s.magnitude, 0.01 * s.magnitude])
         elif s.mode == "bias":
@@ -84,12 +133,8 @@ class _CorruptionState:
         elif s.mode == "delay":
             self.buffer.append(f.copy())
             f[:] = self.buffer[max(0, len(self.buffer) - 1 - s.delay)]
-        elif (
-            s.mode in ("first_contact_window", "random_window")
-            and self.window_start is not None
-            and self.window_start <= t < self.window_start + s.window
-        ):
-            f[:] = 0.0
+        elif s.mode in ("first_contact_window", "random_window", "onset_offset_window") and in_window:
+            self._mask(f)
         o[self.sl] = f
         return o
 
@@ -126,6 +171,8 @@ class PolicyAgent:
     def act(self, obs: np.ndarray) -> tuple[np.ndarray, dict[str, np.ndarray]]:
         x = torch.from_numpy(self.norm(obs)).to(self.device)
         m = self.model
+        if self.latent_fn is not None and getattr(m.cfg, "aux_core", False):
+            raise NotImplementedError("latent ablation is not implemented for models with a separate auxiliary core")
         if self.latent_fn is None or not hasattr(m, "core"):
             out, self.state = m.step(x, self.prev_action, self.state)
         else:
@@ -152,8 +199,15 @@ def run_episodes(
     batch: int = 32,
     record: bool = False,
     expert_cfg: ExpertConfig | None = None,
+    compliance_override: float | None = None,
 ) -> list[dict[str, Any]]:
-    """Roll out ``agent`` (a ``PolicyAgent`` or the string ``"expert"``) and return one dict per episode."""
+    """Roll out ``agent`` (a ``PolicyAgent`` or the string ``"expert"``) and return one dict per episode.
+
+    ``compliance_override`` replaces the compliance command of every action
+    (fixed-compliance control). Behaviour metrics per episode: mean commanded
+    compliance (0 = soft, 1 = stiff) before and after first contact, peg speed
+    over the last 5 steps before first contact, time to first contact.
+    """
     env_cfg = env_cfg or EnvConfig()
     corruption = corruption or ForceCorruption()
     results: list[dict[str, Any]] = []
@@ -186,7 +240,19 @@ def run_episodes(
         if agent != "expert":
             agent.reset(len(ids))
         active = np.ones(len(ids), bool)
-        stats = [{"return": 0.0, "impulse": 0.0, "peak": 0.0, "first": None} for _ in ids]
+        stats = [
+            {
+                "return": 0.0,
+                "impulse": 0.0,
+                "peak": 0.0,
+                "peak_sum": 0.0,
+                "first": None,
+                "c_pre": [],
+                "c_post": [],
+                "speeds": [],
+            }
+            for _ in ids
+        ]
         final_info: list[dict[str, Any] | None] = [None] * len(ids)
         while active.any():
             if agent == "expert":
@@ -196,6 +262,11 @@ def run_episodes(
                 extra: dict[str, np.ndarray] = {}
             else:
                 acts, extra = agent.act(np.stack(obs))
+            if compliance_override is not None:
+                acts = acts.copy()
+                acts[:, 3] = compliance_override
+                if agent != "expert":
+                    agent.prev_action = torch.as_tensor(acts, dtype=torch.float32, device=agent.device)
             for j, env in enumerate(envs):
                 if not active[j]:
                     continue
@@ -210,6 +281,11 @@ def run_episodes(
                 st["return"] += r
                 st["impulse"] += info["contact_force_norm"] * env_cfg.control_dt if info["in_contact"] else 0.0
                 st["peak"] = max(st["peak"], info["peak_force"])
+                st["peak_sum"] = max(st["peak_sum"], info.get("peak_force_sum", 0.0))
+                c01 = (float(np.clip(acts[j][3], -1, 1)) + 1.0) / 2.0
+                (st["c_post"] if st["first"] is not None else st["c_pre"]).append(c01)
+                if st["first"] is None:
+                    st["speeds"].append(float(np.hypot(*env.data.qvel[:2])))
                 if info["first_contact"]:
                     st["first"] = info["t"]
                 obs[j] = cors[j].apply(o, info["t"], info["first_contact"])
@@ -237,6 +313,12 @@ def run_episodes(
                 "steps": float(env.t),
                 "first_contact_step": float(st["first"]) if st["first"] is not None else np.nan,
                 "window_overlapped_first_contact": cors[j].overlapped_first_contact(),
+                "peak_force_sum": st["peak_sum"],
+                "masked_steps": float(cors[j].masked_steps),
+                "masked_force": float(cors[j].masked_force),
+                "compliance_pre_contact": float(np.mean(st["c_pre"])) if st["c_pre"] else np.nan,
+                "compliance_in_contact": float(np.mean(st["c_post"])) if st["c_post"] else np.nan,
+                "approach_speed": float(np.mean(st["speeds"][-5:])) if st["speeds"] else np.nan,
                 **{f"param_{k}": v for k, v in env.params.to_dict().items()},
             }
             if record:
@@ -254,26 +336,51 @@ def run_episodes(
 
 
 def first_contact_prediction_scores(
-    results: list[dict[str, Any]], normalizer: Normalizer, force_slice: slice, horizon: int = 3
-) -> tuple[np.ndarray, np.ndarray]:
+    results: list[dict[str, Any]],
+    normalizer: Normalizer,
+    force_slice: slice,
+    horizon: int = 3,
+    extero_slice: slice | None = None,
+    with_baselines: bool = False,
+):
     """Score/label pairs for "first contact within the next ``horizon`` steps".
 
     Score: predicted future contact-force magnitude (max over the model's force
-    horizon, de-standardised to newtons). Only steps before first contact are
-    used. Requires ``run_episodes(..., record=True)`` with a world model.
+    horizon, de-standardised to newtons). Only steps *before* first contact are
+    used (frames already in contact are excluded), so the score measures
+    anticipation, not contact persistence. Requires
+    ``run_episodes(..., record=True)`` with a world model.
+
+    With ``with_baselines`` also returns scores of two simple predictors on the
+    same steps: the current observed force magnitude, and the negative
+    estimated distance between peg tip and slot entrance (from the pose
+    estimate), as a dict ``{"model": ..., "current_force": ..., "distance": ...}``.
     """
-    scores, labels = [], []
+    scores, labels, cur, dist = [], [], [], []
     mu, sd = normalizer.mean[force_slice], normalizer.std[force_slice]
     for r in results:
         tr = r.get("trace")
         if tr is None or tr["pred_force"] is None:
             continue
         fc = r["first_contact_step"]
+        if normalizer.force_transform != "none":
+            continue
         pred = tr["pred_force"] * sd + mu  # [T, H, 3]
         mag = np.hypot(pred[..., 0], pred[..., 1]).max(-1)
         T = len(mag)
         last = int(fc) if np.isfinite(fc) else T
+        obs = tr["obs"]
         for t in range(min(last, T)):
             scores.append(mag[t])
             labels.append(float(np.isfinite(fc) and fc - (t + 1) < horizon))
-    return np.asarray(scores), np.asarray(labels)
+            if with_baselines:
+                o = obs[t]
+                cur.append(float(np.hypot(*o[force_slice][:2])))
+                if extero_slice is not None:
+                    e = o[extero_slice]
+                    dist.append(-float(np.hypot(e[0], e[1])))
+    if not with_baselines:
+        return np.asarray(scores), np.asarray(labels)
+    return {"model": np.asarray(scores), "current_force": np.asarray(cur), "distance": np.asarray(dist)}, np.asarray(
+        labels
+    )

@@ -1,24 +1,48 @@
-# Contact-State Reuse: Predictive Force-Aware World Models for Flexible Robot Manipulation
+# When Does Force Feedback Help? Predictive Objectives and Contact-Onset Force Use
 
-**Claim under test:** in a simulated planar insertion task, a model trained to predict future observations and contact forces may learn latent "contact states" that carry over to changed physics, and the degree of carry-over may predict how quickly and safely the model adapts. This repository tests that claim; it does not assume it. All results are from simulation and say nothing yet about real robots.
+*Repository: `contact-state-reuse`, release v0.2.0 (revised after review).*
+
+**Question.** In a simulated planar insertion task, when does force help a learned policy: as an input, as a target that a predictive auxiliary loss learns to predict, or both, and at which moments of the insertion? Every condition uses the same recurrent network and the same demonstrations, so only the role of force and the training losses change. All results are from simulation and say nothing yet about real robots.
+
+**Short answer (v0.2, 5 seeds per condition).**
+
+* Predicting the next observation and the next 0.25 s of force made training more reliable and lowered contact forces: success 0.96 vs 0.78 and peak force 5.5 vs 11.4 N relative to behaviour cloning with the same inputs; +0.07 success and -3.6 N relative to a behaviour-cloning baseline with a tuned learning rate.
+* Force was most useful as a training target. A model that predicts force but never receives it reached 0.96 success (0.98 under sensor faults). Live force input then lowered peak force by 1.4 to 2.4 N on a healthy sensor and raised it by 3.8 N on a faulty one, unless the model was trained with simulated faults.
+* The lower forces came mostly from the compliance the policy commands; with compliance fixed by the harness, predictive and behaviour-cloning policies reached similar forces.
+* The trained policies were most sensitive to losing the force reading in the first 0.3 s of contact: +1.8 N, against +0.4 N for an equally long window 0.3 s later that removed a similar amount of force signal.
+* The pattern held for a second, non-privileged demonstrator and on a second task (hole search), where force as an input became essential.
+* Exploratory: under a shift that requires new behaviour (hole search), learned representations were not more stable than an untrained network's, and stability did not predict adaptation. The v0.1 "fine-tuning dip" is a small-data effect of behaviour cloning that the predictive models avoided.
+
+Full write-up: [docs/whitepaper/whitepaper.pdf](docs/whitepaper/whitepaper.pdf) ([Markdown](docs/whitepaper/whitepaper.md)). Point-by-point response to the reviews of v0.1: [docs/whitepaper/response_to_reviewers.pdf](docs/whitepaper/response_to_reviewers.pdf). The first version is kept as [whitepaper_v1](docs/whitepaper/whitepaper_v1.pdf) with its results in [`results/medium/`](results/medium/).
 
 ![pipeline](assets/architecture.svg)
 
-## Motivation
+## What changed in v0.2
 
-Insertion, pressing and assembly tasks are decided after the moment of contact, which is where cameras are least informative and where force and proprioception carry the most information. Most learned manipulation policies treat force as one more input to concatenate. This project asks a narrower question: does force help mainly as an input, or because it lets a predictive model build a representation of the interaction state (approaching, touching, aligning, jammed, inserting) that stays useful when the physics changes?
+The first version compared models of equal parameter count but different trunk widths, let prediction losses see failed episodes that behaviour cloning did not, used 3 seeds with intervals over evaluation episodes only, and was framed around "contact-state reuse". v0.2 re-runs the study:
 
-The framing comes from computational neuroscience. In my doctoral work on prefrontal representations, flexible behaviour depended on population activity patterns that were reused when task contingencies changed. Systems neuroscience has tools for this kind of question: decoding with held-out conditions, representational similarity across conditions, event-aligned trajectories, and perturbation of selected features. This repository applies those tools to the latent states of robot-learning models, with the caution that a similar analysis does not imply a similar mechanism.
+* one fixed network for every condition; losses switched on or off; all losses trained on the same successful demonstrations;
+* a 2 x 2 x 2 factorial (force input, observation target, force target) plus 25 control conditions (failure data, reconstruction, stop-gradient, separate predictive core, loss weights, learning rates, capacity, previous action, force transforms, DART noise, fault-aware training);
+* 5 seeds; intervals from a crossed bootstrap over training seeds and evaluation episodes;
+* timing interventions at onset and at later windows, hold-vs-zero, onset-only; fixed-compliance runs;
+* a second demonstrator, a second task, and a scripted non-privileged controller as a baseline;
+* a redesigned, exploratory reuse and adaptation analysis with reference representations.
 
-## Hypotheses and how they could fail
+Two v0.1 claims did not replicate and are withdrawn: that force as an input harms behaviour cloning, and that the onset window "accounts for 85 to 94 %" of the force effect.
 
-| # | Hypothesis | Supported if | Falsified if |
-|---|---|---|---|
-| H1 | Force and proprioception improve success and safety, mostly under physical shifts | Experiment A: the paired difference (with minus without force) in success or peak force has a 95 % CI excluding 0 on shifted domains, and is larger there than on source | CIs include 0 on shifted domains, or the effect is as large on source as under shift |
-| H2 | Predictive pre-training produces latents that encode contact phase | Experiment B / analysis: episode-grouped probe accuracy on predictive-model latents exceeds the sequence-BC baseline by a margin larger than seed variation | Probe accuracy is equal or lower than the BC baseline |
-| H3 | Contact-state representations are reused across the physical shift | Experiment D: reuse score (phase-matched CKA, normalised by a permutation null) is clearly above 0 and cross-domain probes stay above chance | Reuse near 0, or cross-domain probe accuracy near chance |
-| H4 | More reuse goes with faster, safer adaptation | Experiment D: Spearman correlation between reuse score and adaptation efficiency (and peak-force reduction) is positive with a CI excluding 0 | CI includes 0 or the sign is negative. Even if supported, this is a correlation across models, seeds and shift levels, not evidence that reuse causes faster adaptation |
-| H5 | Force matters specifically around first contact | Experiment C: zeroing force for a window starting at first contact hurts success or safety more than zeroing an equally long window at a random time | No difference between the two windows |
+## Questions and outcomes
+
+| | Statement | Outcome (v0.2) |
+|---|---|---|
+| H1 | Force improves success and safety, mostly under physical shifts | **Not supported as stated.** The effect of force depended on its role and the objective; force inputs were harmful under sensor faults |
+| H2 | Predictive training gives latents that encode contact phase better | **Not supported.** Within-source decoding 0.66 (full model) to 0.70 (behaviour cloning) |
+| H3 | Contact-state representations are reused across a shift | **Shift-dependent.** World-model latents above raw observations in contact phases for the tight fit; below an untrained network for the search shift |
+| H4 | More reuse goes with faster, safer adaptation | **Not supported (exploratory).** rho -0.34 [-0.74, +0.20] across 20 trained models |
+| H5 | Force matters specifically around first contact | **Supported (onset sensitivity).** Onset window +1.8 N vs +0.4 N for a later window removing similar signal |
+| Q1 | Does prediction help on identical data; force as input or target? | Prediction helps (+0.18 vs BC with force, 5/5 seeds); force mainly as a target (+0.22 without force input) |
+| Q2 | Failure data, generic auxiliary losses, weak baseline? | Not failure data; prediction beats reconstruction; smaller but present vs a tuned baseline |
+| Q3 | How are forces lowered? | Mostly through the commanded compliance |
+| Q4 | Other demonstrator or task? | Pattern holds; force input essential only for hole search |
 
 ## Environment
 
@@ -28,152 +52,122 @@ The framing comes from computational neuroscience. In my doctoral work on prefro
 |---|---|---|---|
 | exteroception | 4 | estimated slot entrance relative to the peg tip (x, z), estimated relative angle, estimate-valid flag; a low-dimensional stand-in for a camera pose estimate, with calibration offset, noise and occlusion | yes |
 | proprioception | 7 | joint positions, joint velocities, current compliance level (joint efforts optional, off by default) | yes |
-| force | 3 | planar contact wrench (Fx, Fz, Ty) summed from MuJoCo contact forces, after a sensor model with noise, bias, delay and dropout | yes |
+| force | 3 | planar contact wrench (Fx, Fz, Ty) summed from MuJoCo contact forces, after a sensor model with noise, bias, delay and dropout | yes (masked in no-force conditions) |
 | analysis labels | 6 classes + scalars | `contact_mode`, `first_contact`, `success`, `jam`, `insertion_depth`, `contact_force_norm` | **never** |
 
-The force signal is an idealised external wrench at the contacts, not a wrist force/torque sensor model and not motor-current sensing. See [docs/limitations.md](docs/limitations.md).
+The force signal is an idealised external wrench at the contacts, not a wrist force/torque sensor model and not motor-current sensing. Peak contact force is the maximum over 2 ms physics steps of the summed planar contact force; a summed-contact-magnitude metric (`peak_force_sum`, no cancellation between opposing contacts) is reported alongside.
 
-Domains (per-episode randomisation, `src/contact_state_reuse/envs/domains.py`): `source`, `shifted_friction`, `tight_clearance`, `sensor_noise` (force noise, bias, delay, dropout), `occlusion` (exteroception dropped near the slot), and `mixed`. Shifts can be applied at a graded `severity` between source (0) and fully shifted (1).
+Domains (`src/contact_state_reuse/envs/domains.py`): `source`, `shifted_friction`, `tight_clearance`, `sensor_noise`, `occlusion` (the five evaluated domains), `search` (5 to 9 mm lateral error of the pose estimate; second task), composites such as `search+tight_clearance`, and `mixed`. Shifts can be applied at a graded `severity` in [0, 1].
 
-Contact-mode labels (0 approach, 1 first contact, 2 alignment, 3 insertion, 4 success, 5 jam or failure) are computed from simulator state by fixed rules. They are measurement labels for analysis. They do not claim that real contact phases are discrete.
+Demonstrators (`envs/expert.py`): the privileged scripted expert (true slot pose and contact wrench; main data), a non-privileged variant that perceives only the observation vector (`privileged=False`; second demonstrator and baseline controller), and a search variant for the second task (`search=True`).
 
 ## Models
 
-All models share a fusion encoder (per-modality linear embedding and LayerNorm, with modality masks for ablations) and are sized to the same parameter budget (about 60k by default).
+Every v0.2 condition is the same network (`PredictiveContactWorldModel`, GRU 66 units, 61,469 parameters): fusion encoder with per-modality embeddings and masks, GRU over observation and previous action, action head, and prediction heads for the next observation and the next 5 force readings. Conditions switch losses on or off (`lambda_obs`, `lambda_force`), mask the force input, or apply one of the controls: `lambda_recon` (reconstruction of the current observation), `aux_stopgrad`, `aux_core` (prediction heads on a separate GRU), `use_prev_action`, `force_transform` (`log`, `binary`), and the training options `episode_filter` and `force_aug` (fault-aware training). With both prediction weights at 0 the network is a sequence behaviour-cloning policy.
 
-| Model | Memory | Training signal | Uses simulator labels |
-|---|---|---|---|
-| `ReactivePolicy` | none (current observation) | behaviour cloning | no |
-| `SequencePolicy` | GRU (or causal Transformer) over observation and previous action | behaviour cloning | no |
-| `PredictiveContactWorldModel` (default, self-supervised) | same trunk, latent z_t | behaviour cloning + next-observation prediction + future-force prediction (Gaussian mean and log-variance over 5 steps) | no |
-| `PredictiveContactWorldModel` with **simulator-supervised auxiliary** | same | above + future contact-mode classification | **yes, as a training target only** (`contact_supervision: true` must be set explicitly) |
-| Scripted expert | privileged state | none (it is the data-generation oracle) | reads true slot pose and noise-free wrench |
-
-Three kinds of signal are kept apart throughout:
-
-* **self-supervised**: targets computed from the model's own future observations and force readings;
-* **simulator-supervised auxiliary**: contact-mode labels from the simulator used as a training target, only in configurations named `*contactsup*`;
-* **privileged oracle**: the scripted expert's access to true geometry and forces, used only to generate demonstrations.
+"World model" in the class name means a predictive auxiliary model in a restricted sense: it predicts future observations and forces from history and the policy reads the same latent, but it is not used for planning or imagined rollouts. `ReactivePolicy` and `SequencePolicy` (v0.1 baselines) remain available.
 
 ## Quickstart
 
 ```bash
-# install (Python 3.10+)
 python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
+pip install -e ".[dev,analysis]"          # or: pip install -r requirements-lock.txt && pip install -e . --no-deps
 
-# tiny dataset (about 5 s)
-python scripts/generate_dataset.py --domain source --episodes 60 --seed 0 --out data
+make test                                  # about 25 s
+make demo                                  # small end-to-end run with figures, about 1 minute
 
-# baseline and predictive model (about 30 s each on a laptop CPU)
-python scripts/train.py --data data/source_n60_s0.npz --model configs/models/sequence.yaml --tag sequence
-python scripts/train.py --data data/source_n60_s0.npz --model configs/models/world_model.yaml --tag world_model
+# one experiment at small scale
+python scripts/run_experiment.py configs/experiments/E_factorial.yaml --scale quick
 
-# evaluate on source and shifted domains, with and without force corruption
-python scripts/evaluate.py --checkpoints outputs/train/sequence.pt outputs/train/world_model.pt \
-    --domains source tight_clearance --episodes 20 --corruptions none first_contact_window
-
-# everything above plus representation analysis and figures in one command
-make demo
+# all v0.2 experiments, summaries and figures (about 6 hours on 2 CPU cores)
+bash scripts/run_revision.sh
+python scripts/analyze_force_input.py --run outputs/E_factorial_medium/run1 --out results/revision
+python scripts/summarize_revision.py --out results/revision
+python scripts/make_revision_figures.py --results results/revision --out docs/whitepaper/figures
+python docs/whitepaper/build_pdf.py
 ```
 
-`make demo` writes figures such as `outputs/demo/<timestamp>/figures/dataset_episodes.png` (force and depth traces with phase labels) and `outputs/demo/<timestamp>/analysis/figures/pca_source.png`.
-
-Experiments:
-
-```bash
-make quick        # A-D at quick scale
-make full         # A-D at full scale
-python scripts/run_experiment.py configs/experiments/D_reuse.yaml --scale quick
-```
+Long experiments can be split over processes with `--run-dir <dir> --shard i/n` and aggregated with a final call without `--shard`; finished models and evaluations are cached, so interrupted runs resume.
 
 ## Runtime and resources
 
-Measured on a 2-core cloud CPU without GPU. A laptop should be similar or faster.
+Measured on a 2-core cloud CPU without GPU.
 
 | Command | Time |
 |---|---|
-| `make test` | about 20 s (about 10 s without the slow pipeline tests) |
-| `make demo` | about 1 minute |
-| experiment A or B, quick | about 3 minutes each |
-| experiment C, quick | about 1 to 2 minutes |
-| experiment D, quick | about 5 minutes |
-| full scale, all experiments | several hours on CPU (3 seeds, 400 demonstrations, 3000 updates per model); start separate experiments in parallel processes to use more cores |
-
-A GPU is used automatically when available (`device: auto`). Most evaluation time is MuJoCo simulation on CPU, so a GPU mainly speeds up training.
+| `make test` | about 25 s |
+| one model (1,500 updates) plus evaluation on five domains | about 100 s on one core |
+| experiment E (33 conditions x 5 seeds) | about 2.5 hours on 2 cores |
+| experiments T and L (evaluation only) | about 20 and 10 minutes |
+| experiments G1 and G2 (8 conditions x 5 seeds each) | about 40 minutes each |
+| experiment R (20 pre-trained models, 380 fine-tuning runs) | about 2 hours |
+| v0.1 experiments A to D, medium | about 75 minutes |
 
 ## Results
 
-No results are reported yet. The table below is filled in by running the commands listed under it; nothing in it should be read as a finding until those runs exist.
+All v0.2 numbers come from `scripts/summarize_revision.py` and are committed under [`results/revision/`](results/revision/) (per-episode CSVs in `runs/`, tables in [`SUMMARY.md`](results/revision/SUMMARY.md), key numbers in `key_numbers.json`). Intervals are 95 % crossed seed x episode bootstrap intervals (5 training seeds x 50 evaluation episodes per domain).
 
-| Condition | Source success | Tight clearance success | Peak force, source [N] | Peak force, shifted [N] | Contact-mode probe (balanced acc.) | Reuse score |
-|---|---|---|---|---|---|---|
-| reactive, extero + proprio | TBD | TBD | TBD | TBD | n/a | n/a |
-| reactive, + force | TBD | TBD | TBD | TBD | n/a | n/a |
-| sequence BC, + force | TBD | TBD | TBD | TBD | TBD | TBD |
-| world model, self-supervised | TBD | TBD | TBD | TBD | TBD | TBD |
-| world model, simulator-supervised aux | TBD | TBD | TBD | TBD | TBD | TBD |
+**Experiment E, pooled over the five domains (1,250 episodes per row):**
 
-How to fill it:
+| Condition | Force input | Obs. target | Force target | Success | Peak force [N] |
+|---|---|---|---|---|---|
+| BC | | | | 0.64 [0.46, 0.81] | 11.2 [10.0, 12.5] |
+| BC + force | x | | | 0.78 [0.70, 0.85] | 11.4 [9.3, 14.1] |
+| BC + force, lr 3e-4 | x | | | 0.89 [0.82, 0.95] | 9.1 [8.3, 9.9] |
+| force target | | | x | 0.87 [0.82, 0.91] | 9.5 [7.9, 11.0] |
+| obs prediction + force | x | x | | 0.91 [0.84, 0.97] | 8.0 [5.1, 10.9] |
+| obs + force targets, no force input | | x | x | 0.96 [0.94, 0.98] | 6.2 [5.3, 7.0] |
+| obs + force targets + force input | x | x | x | 0.96 [0.93, 0.98] | 5.5 [4.8, 6.1] |
+| same, fault-aware training | x | x | x | 0.98 [0.96, 0.99] | 5.6 [4.2, 7.3] |
 
-* success and peak force: `results.csv` of experiments A and B (`mean`, `ci_low`, `ci_high` per condition and domain);
-* probe and reuse: `reuse_points.csv` of experiment D (`probe_source_bacc`, `reuse`, with `reuse_ci_low`/`reuse_ci_high`);
-* H4: `reuse_correlations.json` of experiment D;
-* H5: `paired_differences.csv` of experiment C (first-contact window minus random window).
+**Timing (experiment T, predictive model, source domain):** removing the force reading for 0.3 s at contact onset +1.8 N [1.1, 2.6]; 0.3 s later +0.4 N [0.2, 0.8] (similar amount of signal removed); 0.6 s later +0.1 N; random window 0.0 N; whole episode +4.0 N [2.6, 5.5].
 
-Report seed-level variation (`evaluation.metrics.seed_level`) alongside episode-level intervals, and report null or negative results as they come out.
+**Generalisation (G1, G2):** with the non-privileged demonstrator the force-target model without force input was the best learned policy (0.98, 4.7 N); on hole search force input was essential (BC 0.14 without, 0.67 with) and the full predictive model reached 0.73 (0.90 in the plain search domain).
+
+**Exploratory (R):** under the search shift (zero-shot success 0.11 to 0.22), 40 fine-tuning demonstrations raised every family to 0.60 to 0.68, with no family adapting faster; reuse did not predict the gain (rho -0.34 [-0.74, +0.20], n = 20). Fine-tuning behaviour cloning on 5 source demonstrations lowered its source success from 0.88 to 0.48, while the predictive models stayed at 0.95 to 0.97.
+
+These are simulation results with simple planar tasks. They describe what these models learned from these demonstrations and do not establish real-robot behaviour.
 
 ## Scientific rigour
 
-* **Matched capacity.** Every model is sized to the same parameter budget by searching the hidden width (`models.factory.build_model`); a test checks the counts agree within 10 %. Modality ablations zero inputs through a mask, so the network is identical.
-* **Same data and budget.** Within an experiment, every condition uses the same dataset, episode split and number of gradient updates.
+* **One network.** Every v0.2 condition uses the identical architecture and initialisation per seed; only losses, input masks and training data options change. A test checks that `step` and `forward` agree for every variant.
+* **Identical data.** All losses train on the same successful demonstrations; failure exposure is a separate, explicit factor.
+* **Training-run uncertainty.** 5 seeds per condition; crossed seed x episode bootstrap with paired cells (`evaluation/metrics.py`); per-seed means reported.
 * **Episode-level splits.** Train/validation splits and probe cross-validation are grouped by episode, never by time step (tested).
-* **Seeds.** Every random draw comes from a generator derived from an explicit seed; `seed_everything` also fixes PyTorch. Evaluation seeds are disjoint from data seeds, and episode *i* of an evaluation set is identical across conditions, so comparisons are paired.
-* **Modality corruption controls.** Force can be zeroed, biased, noised, delayed or dropped at evaluation time. The first-contact window is compared against a random window of the same length.
-* **Nulls for similarity.** Reuse scores are normalised against a permutation null that breaks the episode correspondence while keeping phase content.
-* **Labels are for analysis.** Contact modes are computed from privileged simulator state; giving them to the policy would let it read the answer. They appear only in `info`, dataset records, analysis, and the explicitly marked supervised-auxiliary configuration.
-* **Simulation to reality.** None of these results transfer to hardware without validation; see the limitations below.
+* **Paired evaluation.** Evaluation seeds are disjoint from data seeds, and episode *i* of an evaluation set is identical across conditions.
+* **Interventions with accounting.** Force interventions record whether the window was reached and how much force signal was removed.
+* **References and nulls for similarity.** Reuse scores are compared with permutation nulls (full distribution) and with raw-observation, proprioception, task-progress and untrained-network references.
+* **Labels are for analysis.** Contact modes are computed from privileged simulator state and never given to a v0.2 policy.
 
 ## Limitations and next steps
 
-* The simulated force signal is an ideal contact wrench. It is not equivalent to force-transparent motor sensing, which includes friction, gearing, motor dynamics and calibration error.
-* No hardware validation.
-* One planar task family with a few physical shifts.
-* Demonstrations come from one scripted expert with a fixed distribution of strategies, so models can only learn what that expert shows.
-* Contact-mode labels are rule-based and may not match how a real system's interaction evolves.
+* Simulation only; the force signal is an ideal contact wrench, not actuator-current or wrist-sensor force.
+* Small planar tasks, low-dimensional "vision", scripted demonstrators, 300 demonstrations and 61k-parameter models.
+* Five seeds; some behaviour-cloning comparisons remain inconclusive.
+* The scripted non-privileged controller is a strong baseline on these tasks; this repository compares learned policies with each other.
 
-Next steps: real robot data; models of actuator-current sensing; tactile sensors; larger multimodal pre-training across tasks and data mixtures. More in [docs/limitations.md](docs/limitations.md).
+Next steps: actuator-derived force, data-scale studies, fault-aware sensing with health estimation, hardware onset-window tests, image observations. More in [docs/limitations.md](docs/limitations.md).
 
 ## Repository layout
 
 ```
-configs/                env, model, training and experiment configs (quick and full sections)
+configs/experiments/    A-D (v0.1), E_factorial, T_timing, L_ablation, G_nonpriv, G_search, R_reuse (v0.2)
 src/contact_state_reuse/
-  envs/                 ContactInsertionEnv, domains, sensor models, labels, scripted expert
-  data/                 generation, schema validation, loading, episode tensors
-  models/               reactive, sequence and predictive world model; matched sizing
-  training/             losses (each logged separately) and the training loop
-  evaluation/           batched rollouts, force corruption, metrics, experiments A-D
-  analysis/             latent extraction, probes, CKA, reuse score, feature ablation, plots
-scripts/                command-line entry points
+  envs/                 ContactInsertionEnv, domains, sensor models, labels, scripted demonstrators
+  data/                 generation, schema validation, loading, normalisation, episode tensors
+  models/               reactive, sequence and predictive models; options for controls
+  training/             losses (each logged, gradient norms per term) and the training loop
+  evaluation/           rollouts, force interventions, metrics and crossed bootstrap, experiments
+  analysis/             latents, probes, CKA, reuse score, reference representations, ablation, plots
+scripts/                entry points (run_experiment, run_revision.sh, summarize_*, make_*_figures, videos)
+results/revision/       v0.2 results; results/medium/ v0.1 results
+docs/whitepaper/        white paper (v0.2 and v0.1), response to reviewers, figures, PDF builder
 tests/                  pytest suite
-docs/                   methods, data schema, limitations, reproducibility, references
-notebooks/              dataset exploration and representation analysis
 ```
 
 ## References
 
-Full BibTeX in [docs/references.bib](docs/references.bib).
-
-* **MuJoCo** (Todorov, Erez and Tassa, 2012; documentation at mujoco.readthedocs.io). The physics engine used here. Its soft-contact model makes contact forces depend on solver parameters, which is why force magnitudes are only compared within this simulator.
-* **Gymnasium** (Towers et al., 2024; documentation at gymnasium.farama.org). The environment interface (`reset`, `step`, spaces, termination and truncation).
-* **Towards Forceful Robotic Foundation Models: a Literature Survey** (Xie and Correll, 2025). Reviews how force, from joint proprioception to tactile sensing, is used in learned manipulation. It concludes that force is essential mainly for a small set of tasks, peg-in-hole insertion among them, which is part of why insertion is the test bed here.
-* **Making Sense of Vision and Touch** (Lee et al., 2019). Self-supervised multimodal representation learning for contact-rich insertion with vision and force, including contact-related prediction objectives. It is the closest precedent for using predictive objectives to shape a contact representation; it did not study reuse across physical shifts.
-* **FoAR: Force-Aware Reactive Policy** (He et al., 2024). Uses a future-contact predictor to decide how much the policy relies on force, and reports that simply concatenating force did not reliably help. This motivates comparing force as an input with force as a prediction target.
-* **TacForeSight: Force-Guided Tactile World Model** (Zang et al., 2026). Predicts future tactile latents conditioned on wrist force/torque and uses them as contact priors for a policy on a real robot. It is an example of a force-guided predictive model at a much larger scale and with tactile sensing, which this project does not have.
-* **Similarity of Neural Network Representations Revisited** (Kornblith et al., 2019). Introduces CKA, the similarity measure used for the reuse score.
-* **The Geometry of Abstraction in the Hippocampus and Prefrontal Cortex** (Bernardi et al., 2020). Uses cross-condition generalisation of linear decoders to measure abstract, reusable representations in neural populations. The cross-domain probe here borrows that logic.
-* **DART** (Laskey et al., 2017) for noise injection during demonstration collection, and **PlaNet / RSSM** (Hafner et al., 2019) as context for latent dynamics models.
+Full list in the white paper and in [docs/references.bib](docs/references.bib). Closest work: FoAR (He et al., 2025, RA-L), Force Policy (Fang et al., 2026, RSS), PhaForce (Wang et al., 2026, preprint), ForceVLA (Yu et al., 2025, NeurIPS), TacForeSight (Zang et al., 2026, preprint), Lee et al. (2019, ICRA); methods: CKA (Kornblith et al., 2019), DART (Laskey et al., 2017), the pigeonhole bootstrap (Owen, 2007), and Agarwal et al. (2021) on reporting uncertainty over training runs.
 
 ## Author and licence
 

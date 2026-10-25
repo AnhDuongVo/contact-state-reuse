@@ -1,6 +1,19 @@
 # Methods
 
-This document defines what each experiment does and how each quantity is computed. Code references point to `src/contact_state_reuse/`.
+This document defines what each experiment does and how each quantity is computed. Code references point to `src/contact_state_reuse/`. Sections 1 to 6 describe the shared machinery and the v0.1 experiments A to D; the v0.2 experiments are summarised directly below and specified in full in the white paper (Section 4).
+
+## v0.2 (revision) at a glance
+
+* **One network.** Every condition of E, G1 and G2 is `PredictiveContactWorldModel` with a GRU of 66 units (61,469 parameters); behaviour cloning is the same network with both prediction weights at 0. Controls: `lambda_recon`, `aux_stopgrad`, `aux_core`, `use_prev_action`, `force_transform` (`models/common.py`).
+* **Identical data.** `TrainConfig.episode_filter: success` trains every loss on the successful episodes; failure exposure is a separate condition (`episode_filter: all`).
+* **Fault-aware training.** `TrainConfig.force_aug` appends a copy of the training episodes whose force *input* carries the sensor-fault model; prediction targets keep the original readings (`training/trainer.add_force_corruption`).
+* **Gradient norms.** The trainer logs the gradient norm of each weighted loss term on the shared encoder and GRU (`grad_<term>` in the history).
+* **Force metrics.** `peak_force`: maximum over physics steps of the magnitude of the summed planar contact force; `peak_force_sum`: maximum of the sum of individual contact-force magnitudes (no cancellation).
+* **Interventions (T).** `ForceCorruption` modes `first_contact_window`, `onset_offset_window` (offset after onset), `onset_only`, `hold_onset`, `random_window`, `zero`, `scale`; each episode records `masked_steps` and `masked_force`. `run_episodes(..., compliance_override=c)` fixes the compliance command.
+* **Behaviour metrics.** Commanded compliance before and after first contact, peg speed before contact, time to first contact, episode length.
+* **Demonstrators and second task.** `ExpertConfig(privileged=False)` estimates the slot pose online from the observation; `search=True` adds hole search; the `search` domain offsets the pose estimate by 5 to 9 mm.
+* **Statistics.** Crossed seed x episode bootstrap (`evaluation/metrics.py`: `crossed_bootstrap`, `seed_episode_summary`, `paired_crossed`).
+* **Representation analysis (R).** Held-out-pair probes (`analysis/probes.paired_heldout_probe`), reference representations (`analysis/latents.reference_latents`: raw observations, proprioception, a progress clock) and an untrained network; reuse null quantiles and sensitivity variants; jackknife intervals (`analysis/reuse.py`); adaptation as gain over zero-shot (`evaluation/revision.py`).
 
 ## 1. Task and simulation
 
@@ -20,7 +33,7 @@ This document defines what each experiment does and how each quantity is compute
 
 ## 2. Data
 
-Scripted expert with privileged state, DART noise (sigma 0.1 on motion actions, compliance not perturbed) and a fraction `p_perturbed` of perturbed demonstrations (large aim error, stiff pushing, uncorrected angle error) that produce jams and high-force episodes. Behaviour cloning uses successful episodes only (`bc_on_failures: false`); predictive losses use all episodes, so failures still teach the model what jams look like.
+Scripted expert with privileged state, DART noise (sigma 0.1 on motion actions, compliance not perturbed) and a fraction `p_perturbed` of perturbed demonstrations (large aim error, stiff pushing, uncorrected angle error) that produce jams and high-force episodes. Behaviour cloning uses successful episodes only (`bc_on_failures: false`). In v0.1, predictive losses used all episodes; in v0.2 every loss uses the successful episodes (`episode_filter: success`) unless a condition explicitly includes failures.
 
 Pairing: episode *i* of every dataset generated with seed *s* uses environment seed `derive_seed(s, i)`, independent of the domain. Parameters are drawn in a fixed order, so the source and shifted datasets share geometry, start pose and noise streams and differ only in shifted parameters.
 

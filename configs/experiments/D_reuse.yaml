@@ -40,6 +40,13 @@ reuse:
 eval:
   n_episodes: 50
   seed: 123
+# medium: the scale used for the white paper (3 seeds; about 2 hours for all
+# experiments on 2 CPU cores). full: larger, for a lab machine.
+medium:
+  data: {n_train: 300, n_analysis: 60}
+  train: {steps: 1500, batch_episodes: 16, log_every: 250}
+  reuse: {finetune_steps: 300, n_perm: 50, n_boot: 300}
+  eval: {n_episodes: 40}
 quick:
   seeds: [0, 1]
   data: {n_train: 120, n_analysis: 40}

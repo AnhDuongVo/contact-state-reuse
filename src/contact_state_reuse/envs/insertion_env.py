@@ -136,7 +136,7 @@ class ContactInsertionEnv(gym.Env):
     # ------------------------------------------------------------ building
     def _xml(self, p: EpisodeParams) -> str:
         a = PEG_HALF_W + p.clearance / 2
-        c, W, H, T = CHAMFER, SLOT_HALF_OUTER, SLOT_DEPTH, 0.03
+        c, W, H, T = p.chamfer, SLOT_HALF_OUTER, SLOT_DEPTH, 0.03
         timeconst = 0.006 / np.sqrt(max(p.contact_stiffness, 1e-3))
         lo = H - c
         geoms = []
@@ -229,6 +229,7 @@ class ContactInsertionEnv(gym.Env):
         buf = np.zeros(6)
         tip = np.array([d.qpos[0], 0.0, d.qpos[1]])
         touching = False
+        mag_sum = 0.0
         for i in range(d.ncon):
             con = d.contact[i]
             if con.geom1 != self._peg_geom and con.geom2 != self._peg_geom:
@@ -243,7 +244,11 @@ class ContactInsertionEnv(gym.Env):
             total[0] += f_on_peg[0]
             total[1] += f_on_peg[2]
             total[2] += r[2] * f_on_peg[0] - r[0] * f_on_peg[2]
+            mag_sum += float(np.linalg.norm(buf[:3]))
             touching = True
+        # sum of individual contact-force magnitudes (no cancellation between
+        # opposing contacts); reported as a secondary force metric
+        self.last_contact_force_sum = mag_sum
         return total, touching
 
     # ---------------------------------------------------------- gym API
@@ -290,6 +295,7 @@ class ContactInsertionEnv(gym.Env):
         self._potential = self._progress_potential()
         obs = self._observe(wrench)
         info = self._info(wrench, touching, peak=float(np.linalg.norm(wrench[:2])), first=False)
+        info["peak_force_sum"] = float(self.last_contact_force_sum)
         info["params"] = self.params.to_dict()
         info["domain"] = self.concrete_domain
         return obs, info
@@ -306,12 +312,13 @@ class ContactInsertionEnv(gym.Env):
         self.setpoint = np.clip(self.setpoint, q - win, q + win)
         self._set_gains((a[3] + 1.0) / 2.0)
         self.data.ctrl[:] = self.setpoint
-        peak, touching_any = 0.0, False
+        peak, peak_sum, touching_any = 0.0, 0.0, False
         for _ in range(self.n_sub):
             mujoco.mj_step(self.model, self.data)
             if self.data.ncon:
                 w, touching = self.contact_wrench()
                 peak = max(peak, float(np.hypot(w[0], w[1])))
+                peak_sum = max(peak_sum, self.last_contact_force_sum)
                 touching_any |= touching
         self.t += 1
         self.last_action = a.astype(np.float32)
@@ -339,6 +346,7 @@ class ContactInsertionEnv(gym.Env):
         reward = self._reward(peak)
         obs = self._observe(wrench)
         info = self._info(wrench, in_contact, peak, first)
+        info["peak_force_sum"] = float(peak_sum)
         return obs, reward, terminated, truncated, info
 
     # ------------------------------------------------------------ helpers
@@ -369,7 +377,8 @@ class ContactInsertionEnv(gym.Env):
         if self.cfg.proprio_include_effort:
             parts.append(self.data.actuator_force[:3])
         parts.append(self.force_sensor(wrench))
-        return np.concatenate(parts).astype(np.float32)
+        self.last_obs = np.concatenate(parts).astype(np.float32)
+        return self.last_obs.copy()
 
     def _info(self, wrench: np.ndarray, in_contact: bool, peak: float, first: bool) -> dict[str, Any]:
         depth = self.insertion_depth()
@@ -380,7 +389,7 @@ class ContactInsertionEnv(gym.Env):
             steps_since_first_contact=since,
             first_contact_window=self.cfg.first_contact_window,
             depth=depth,
-            entry_depth=CHAMFER + 0.0005,
+            entry_depth=self.params.chamfer + 0.0005,
             in_contact=in_contact,
         )
         return {

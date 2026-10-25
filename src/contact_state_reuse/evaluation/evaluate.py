@@ -34,6 +34,7 @@ def evaluate_checkpoint(
     device: str = "cpu",
     labels: dict[str, Any] | None = None,
     contact_auroc: bool = False,
+    compliance_override: float | None = None,
 ) -> pd.DataFrame:
     """Roll out one checkpoint on every (domain, corruption) pair; returns per-episode rows."""
     model, mcfg, norm, ckpt = load_checkpoint(checkpoint, get_device(device))
@@ -50,19 +51,28 @@ def evaluate_checkpoint(
                 env_cfg=env_cfg,
                 corruption=cor,
                 record=contact_auroc and mcfg.kind == "world_model" and mcfg.lambda_force > 0,
+                compliance_override=compliance_override,
             )
-            auroc = np.nan
+            aurocs = {"first_contact_auroc": np.nan, "auroc_current_force": np.nan, "auroc_distance": np.nan}
             # only meaningful when the force head was trained
             if contact_auroc and mcfg.kind == "world_model" and mcfg.lambda_force > 0:
                 from sklearn.metrics import roc_auc_score
 
                 layout = {k: slice(*v) for k, v in ckpt["layout"].items()}
-                s, y = first_contact_prediction_scores(res, norm, layout["force"])
+                sc, y = first_contact_prediction_scores(
+                    res, norm, layout["force"], extero_slice=layout["extero"], with_baselines=True
+                )
                 if len(np.unique(y)) == 2:
-                    auroc = float(roc_auc_score(y, s))
+                    for key, name in (
+                        ("model", "first_contact_auroc"),
+                        ("current_force", "auroc_current_force"),
+                        ("distance", "auroc_distance"),
+                    ):
+                        if len(sc[key]) == len(y):
+                            aurocs[name] = float(roc_auc_score(y, sc[key]))
             for r in res:
                 r.pop("trace", None)
-                r["first_contact_auroc"] = auroc
+                r.update(aurocs)
                 r.update(labels or {})
                 rows.append(r)
     return pd.DataFrame(rows)

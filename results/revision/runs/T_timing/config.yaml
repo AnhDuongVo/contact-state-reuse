@@ -1,0 +1,53 @@
+experiment: T_timing
+kind: timing_v2
+source_run: outputs/E_factorial_medium/run1
+seeds:
+- 0
+- 1
+- 2
+- 3
+- 4
+conditions:
+- obs_F_ftgt
+- obs_F
+- bc_F
+- bc
+- obs_ftgt
+- bc_F_lr3e-4
+- obs_F_ftgt_lr3e-4
+corruptions:
+- mode: none
+- mode: first_contact_window
+  window: 6
+- mode: onset_offset_window
+  window: 6
+  offset: 6
+- mode: onset_offset_window
+  window: 6
+  offset: 12
+- mode: onset_offset_window
+  window: 6
+  offset: 24
+- mode: random_window
+  window: 6
+  random_max_start: 80
+- mode: onset_only
+  window: 6
+- mode: hold_onset
+  window: 6
+- mode: zero
+- mode: scale
+  magnitude: 0.5
+- mode: scale
+  magnitude: 2.0
+compliance_overrides:
+- -0.5
+- 0.5
+eval:
+  domains:
+  - source
+  - tight_clearance
+  n_episodes: 60
+  seed: 123
+_scale: medium
+_source: configs/experiments/T_timing.yaml

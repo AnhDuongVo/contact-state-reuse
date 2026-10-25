@@ -9,7 +9,8 @@ the shifted-domain latents of a situation are no more similar to its
 source-domain latents than to those of a random other episode in the same
 phase; R_p = 1 means identical geometry up to rotation and scale. Negative
 values are possible. The reuse score is the mean of R_p over phases with at
-least ``min_episodes`` paired episodes. A bootstrap over episodes gives a CI.
+least ``min_episodes`` paired episodes. A leave-one-episode-out jackknife
+gives an approximate 95 % interval (``n_boot`` > 0 switches it on).
 """
 
 from __future__ import annotations
@@ -53,19 +54,32 @@ def reuse_score(
             "cka": cka,
             "null_mean": mu,
             "null_sd": float(np.nanstd(null)),
+            "null_q05": float(np.nanquantile(null, 0.05)),
+            "null_q50": float(np.nanquantile(null, 0.5)),
+            "null_q95": float(np.nanquantile(null, 0.95)),
+            "cka_minus_null": float(cka - mu),
+            "p_above_null": float((np.sum(null >= cka) + 1) / (len(null) + 1)),
             "reuse": r,
             "n_episodes": int(len(eps)),
         }
-        blocks[p] = (xb, yb, mu)
+        blocks[p] = (xb, yb, mu, eps)
     if not blocks:
         return ReuseResult(float("nan"), (float("nan"), float("nan")), per_phase)
     score = float(np.nanmean([v["reuse"] for v in per_phase.values()]))
-    rng = np.random.default_rng(seed)
-    boots = []
-    for _ in range(n_boot):
+    if n_boot <= 0:
+        return ReuseResult(score, (float("nan"), float("nan")), per_phase)
+    # Leave-one-episode-out jackknife interval. (An episode bootstrap is biased
+    # upwards for CKA: duplicated episodes add identical rows to both blocks
+    # and inflate the similarity, so its intervals can exclude the estimate.)
+    episodes = np.unique(np.concatenate([e for *_, e in blocks.values()]))
+    n = len(episodes)
+    jack = []
+    for ep in episodes:
         vals = []
-        for xb, yb, mu in blocks.values():
-            idx = rng.integers(0, len(xb), len(xb))
-            vals.append((cka_blocks(xb[idx], yb[idx]) - mu) / (1 - mu))
-        boots.append(np.nanmean(vals))
-    return ReuseResult(score, (float(np.nanpercentile(boots, 2.5)), float(np.nanpercentile(boots, 97.5))), per_phase)
+        for xb, yb, mu, eps in blocks.values():
+            keep = eps != ep
+            vals.append((cka_blocks(xb[keep], yb[keep]) - mu) / (1 - mu))
+        jack.append(np.nanmean(vals))
+    jack = np.asarray(jack)
+    se = float(np.sqrt((n - 1) / n * np.sum((jack - jack.mean()) ** 2)))
+    return ReuseResult(score, (score - 1.96 * se, score + 1.96 * se), per_phase)

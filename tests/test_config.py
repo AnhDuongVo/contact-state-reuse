@@ -18,7 +18,7 @@ def test_env_yaml_matches_defaults():
 
 
 @pytest.mark.parametrize("name", ["A_modality", "B_objective", "C_force_timing", "D_reuse"])
-@pytest.mark.parametrize("scale", ["quick", "full"])
+@pytest.mark.parametrize("scale", ["quick", "medium", "full"])
 def test_experiment_configs_parse(name, scale):
     cfg = load_config(ROOT / "configs" / "experiments" / f"{name}.yaml", scale)
     for cond in cfg["conditions"]:

@@ -35,12 +35,13 @@ from ..analysis.reuse import reuse_score
 from ..analysis.stats import spearman_with_ci
 from ..data.dataset import load_dataset
 from ..data.generate import DatasetConfig, generate_dataset
+from ..envs.expert import ExpertConfig
 from ..envs.insertion_env import EnvConfig
 from ..models.common import ModelConfig
 from ..models.factory import load_checkpoint
-from ..training.trainer import TrainConfig, train_model
+from ..training.trainer import TrainConfig, TrainResult, train_model
 from ..utils.config import from_dict
-from ..utils.io import save_json
+from ..utils.io import load_json, save_json
 from ..utils.seeding import seed_everything
 from .evaluate import evaluate_checkpoint, write_outputs
 from .metrics import paired_difference, summarize
@@ -50,6 +51,29 @@ from .rollout import ForceCorruption
 def _trapz(y: np.ndarray, x: np.ndarray) -> float:
     """Trapezoidal integral (avoids the numpy 1/2 trapz/trapezoid rename)."""
     return float(np.sum((y[1:] + y[:-1]) / 2.0 * np.diff(x)))
+
+
+# ------------------------------------------------------- resumable caching
+def _train_cached(dataset_paths, mcfg: ModelConfig, tcfg: TrainConfig, out_dir: Path, tag: str, **kw) -> TrainResult:
+    """Train, or reuse ``<out_dir>/<tag>.pt`` if a previous (interrupted) run already finished it."""
+    ckpt, hist = Path(out_dir) / f"{tag}.pt", Path(out_dir) / f"{tag}_history.json"
+    if ckpt.exists() and hist.exists():
+        h = load_json(hist)
+        c = dict(h["model_config"])
+        c["modalities"] = tuple(c["modalities"])
+        return TrainResult(ckpt, h["history"], ModelConfig(**c), int(h["n_params"]), 0)
+    return train_model(dataset_paths, mcfg, tcfg, out_dir, tag=tag, **kw)
+
+
+def _eval_cached(run_dir: Path, key: str, checkpoint: Path, *args: Any, **kwargs: Any) -> pd.DataFrame:
+    """Evaluate, or reuse ``<run_dir>/evals/<key>.csv`` from an interrupted run."""
+    path = Path(run_dir) / "evals" / f"{key}.csv"
+    if path.exists():
+        return pd.read_csv(path)
+    df = evaluate_checkpoint(checkpoint, *args, **kwargs)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(path, index=False)
+    return df
 
 
 # ----------------------------------------------------------------- helpers
@@ -62,10 +86,18 @@ def ensure_dataset(
     severity: float = 1.0,
     p_perturbed: float | None = None,
 ) -> Path:
-    """Generate a dataset once and cache it under ``cfg['data']['dir']``."""
+    """Generate a dataset once and cache it under ``cfg['data']['dir']``.
+
+    ``cfg['data']['expert']`` (optional) holds ExpertConfig overrides, for
+    example ``{privileged: false}`` for the non-privileged demonstrator; they
+    are encoded in the file name.
+    """
     d = cfg["data"]
     p_pert = d.get("p_perturbed", 0.2) if p_perturbed is None else p_perturbed
+    ex = dict(d.get("expert") or {})
     tag = f"{name}_{domain}_sev{severity:g}_n{n_episodes}_s{seed}_p{p_pert:g}_d{d.get('dart_sigma', 0.1):g}"
+    if ex:
+        tag += "_x" + "-".join(f"{k}{v:g}" if isinstance(v, float) else f"{k}{v}" for k, v in sorted(ex.items()))
     path = Path(d["dir"]) / f"{tag}.npz"
     if not path.exists():
         generate_dataset(
@@ -80,6 +112,7 @@ def ensure_dataset(
                 out_dir=d["dir"],
             ),
             EnvConfig(),
+            expert_cfg=ExpertConfig(**ex) if ex else None,
             verbose=False,
         )
     return path
@@ -108,57 +141,88 @@ def _save_config(cfg: dict[str, Any], run_dir: Path) -> None:
 def _train_and_eval_conditions(
     cfg: dict[str, Any], run_dir: Path, conditions: list[dict[str, Any]], corruptions: tuple[ForceCorruption, ...]
 ) -> tuple[pd.DataFrame, dict]:
+    """Train and evaluate every (seed, condition) job.
+
+    A condition may override ``data`` (dataset generation, e.g. DART noise or
+    the demonstrator), ``train`` (TrainConfig fields) and add
+    ``eval_corruptions`` evaluated in addition to the default corruptions.
+    With ``cfg['_shard'] = (i, n)`` only every n-th job (offset i) is run and
+    nothing is aggregated; a final unsharded call then reads all cached results.
+    """
     ev = cfg["eval"]
     rows, histories = [], {}
-    data_cfg = cfg["data"]
-    train_path = ensure_dataset(
-        cfg, "train", data_cfg.get("train_domain", "source"), data_cfg["n_train"], data_cfg.get("seed", 0)
-    )
-    for seed in cfg["seeds"]:
-        for cond in conditions:
-            mcfg = model_config(cfg, cond["model"])
-            tag = f"{cond['name']}_seed{seed}"
-            res = train_model(
-                [train_path],
-                mcfg,
-                train_config(cfg, seed),
-                run_dir / "checkpoints",
-                tag=tag,
-                verbose=cfg.get("verbose", True),
+    jobs = [(seed, cond) for seed in cfg["seeds"] for cond in conditions]
+    shard = cfg.get("_shard")
+    if shard is not None:
+        jobs = jobs[shard[0] :: shard[1]]
+    for seed, cond in jobs:
+        ccfg = {**cfg, "data": {**cfg["data"], **cond.get("data", {})}}
+        data_cfg = ccfg["data"]
+        train_path = ensure_dataset(
+            ccfg, "train", data_cfg.get("train_domain", "source"), data_cfg["n_train"], data_cfg.get("seed", 0)
+        )
+        mcfg = model_config(cfg, cond["model"])
+        tag = f"{cond['name']}_seed{seed}"
+        res = _train_cached(
+            [train_path],
+            mcfg,
+            train_config(cfg, seed, **cond.get("train", {})),
+            run_dir / "checkpoints",
+            tag=tag,
+            verbose=cfg.get("verbose", True),
+        )
+        histories[tag] = res.history
+        labels = {
+            "condition": cond["name"],
+            "seed": seed,
+            "n_params": res.n_params,
+            "hidden": res.model_config.hidden,
+            "kind": res.model_config.kind,
+        }
+        df = _eval_cached(
+            run_dir,
+            tag,
+            res.checkpoint,
+            tuple(ev["domains"]),
+            ev["n_episodes"],
+            seed=ev.get("seed", 123),
+            corruptions=corruptions,
+            contact_auroc=ev.get("contact_auroc", False),
+            labels=labels,
+        )
+        rows.append(df)
+        if cond.get("eval_corruptions"):
+            rows.append(
+                _eval_cached(
+                    run_dir,
+                    f"{tag}_extra",
+                    res.checkpoint,
+                    tuple(cond.get("eval_corruption_domains", ["source"])),
+                    ev["n_episodes"],
+                    seed=ev.get("seed", 123),
+                    corruptions=corruption_list(cond["eval_corruptions"]),
+                    labels=labels,
+                )
             )
-            histories[tag] = res.history
-            df = evaluate_checkpoint(
-                res.checkpoint,
-                tuple(ev["domains"]),
-                ev["n_episodes"],
-                seed=ev.get("seed", 123),
-                corruptions=corruptions,
-                contact_auroc=ev.get("contact_auroc", False),
-                labels={
-                    "condition": cond["name"],
-                    "seed": seed,
-                    "n_params": res.n_params,
-                    "hidden": res.model_config.hidden,
-                    "kind": res.model_config.kind,
-                },
-            )
-            rows.append(df)
-            print(
-                f"  {tag}: params={res.n_params} success(source)="
-                f"{df[df.domain == ev['domains'][0]].success.mean():.2f}",
-                flush=True,
-            )
+        print(
+            f"  {tag}: params={res.n_params} success(source)={df[df.domain == ev['domains'][0]].success.mean():.2f}",
+            flush=True,
+        )
     return pd.concat(rows, ignore_index=True), histories
 
 
 # --------------------------------------------------------------- A and B
 def run_condition_experiment(cfg: dict[str, Any], run_dir: Path) -> pd.DataFrame:
-    """Shared driver for experiments A (modalities) and B (objectives)."""
+    """Shared driver for experiments A (modalities), B (objectives) and the v0.2
+    factorial / generalisation experiments."""
     seed_everything(cfg["seeds"][0])
     _save_config(cfg, run_dir)
     eps, histories = _train_and_eval_conditions(
         cfg, run_dir, cfg["conditions"], corruption_list(cfg["eval"].get("corruptions"))
     )
+    if cfg.get("_shard") is not None:
+        return eps
+    save_json(histories, run_dir / "training_histories.json")
     summary = write_outputs(
         run_dir, eps, ["condition", "domain", "corruption"], {"experiment": cfg["experiment"], "seeds": cfg["seeds"]}
     )
@@ -266,7 +330,7 @@ def run_reuse(cfg: dict[str, Any], run_dir: Path) -> pd.DataFrame:
         for cond in cfg["conditions"]:
             mcfg = model_config(cfg, cond["model"])
             tag = f"{cond['name']}_seed{seed}"
-            pre = train_model(
+            pre = _train_cached(
                 [train_path], mcfg, train_config(cfg, seed), ck, tag=tag, verbose=cfg.get("verbose", True)
             )
             model, _, norm, _ = load_checkpoint(pre.checkpoint)
@@ -288,7 +352,9 @@ def run_reuse(cfg: dict[str, Any], run_dir: Path) -> pd.DataFrame:
                 for p, v in rr.per_phase.items():
                     cka_rows.append({"model": cond["name"], "seed": seed, "severity": sev, "phase": p, **v})
                 # zero-shot and adaptation
-                zs = evaluate_checkpoint(
+                zs = _eval_cached(
+                    run_dir,
+                    f"{tag}_sev{sev:g}_zeroshot",
                     pre.checkpoint,
                     (shift,),
                     ev["n_episodes"],
@@ -299,7 +365,7 @@ def run_reuse(cfg: dict[str, Any], run_dir: Path) -> pd.DataFrame:
                 curve = [{"budget": 0, "success": zs.success.mean(), "peak_force": zs.peak_force.mean()}]
                 episodes.append(zs.assign(severity=sev))
                 for budget in rcfg["budgets"]:
-                    ft = train_model(
+                    ft = _train_cached(
                         [ft_paths[sev]],
                         mcfg,
                         train_config(
@@ -315,7 +381,9 @@ def run_reuse(cfg: dict[str, Any], run_dir: Path) -> pd.DataFrame:
                         tag=f"{tag}_sev{sev:g}_ft{budget}",
                         verbose=False,
                     )
-                    e = evaluate_checkpoint(
+                    e = _eval_cached(
+                        run_dir,
+                        f"{tag}_sev{sev:g}_ft{budget}",
                         ft.checkpoint,
                         (shift,),
                         ev["n_episodes"],
@@ -399,8 +467,17 @@ def run_reuse(cfg: dict[str, Any], run_dir: Path) -> pd.DataFrame:
 
 
 def run_experiment(cfg: dict[str, Any], run_dir: Path) -> pd.DataFrame:
+    from .revision import run_ablation_seeds, run_reuse_v2, run_timing_v2
+
     kind = cfg.get("kind")
-    runners = {"conditions": run_condition_experiment, "force_timing": run_force_timing, "reuse": run_reuse}
+    runners = {
+        "conditions": run_condition_experiment,
+        "force_timing": run_force_timing,
+        "reuse": run_reuse,
+        "timing_v2": run_timing_v2,
+        "ablation": run_ablation_seeds,
+        "reuse_v2": run_reuse_v2,
+    }
     if kind not in runners:
         raise ValueError(f"config 'kind' must be one of {sorted(runners)}, got {kind!r}")
     return runners[kind](cfg, run_dir)

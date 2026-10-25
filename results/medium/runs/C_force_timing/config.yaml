@@ -1,0 +1,42 @@
+experiment: C_force_timing
+kind: force_timing
+output_root: outputs
+seeds:
+- 0
+- 1
+- 2
+data:
+  dir: data/experiments
+  n_train: 300
+  seed: 0
+  p_perturbed: 0.2
+  dart_sigma: 0.1
+model_defaults:
+  param_budget: 60000
+  core: gru
+  modalities:
+  - extero
+  - proprio
+  - force
+train:
+  steps: 1500
+  batch_episodes: 16
+  lr: 0.001
+  log_every: 250
+conditions:
+- name: sequence_EPF
+  model:
+    kind: sequence
+- name: world_model_EPF
+  model:
+    kind: world_model
+eval:
+  domains:
+  - source
+  - tight_clearance
+  n_episodes: 60
+  seed: 123
+  window: 6
+  random_max_start: 80
+_scale: medium
+_source: configs/experiments/C_force_timing.yaml

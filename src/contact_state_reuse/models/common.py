@@ -9,6 +9,7 @@ import torch.nn as nn
 
 MODALITIES = ("extero", "proprio", "force")
 N_ACTION = 4
+FORCE_TRANSFORMS = ("none", "log", "binary")
 
 
 @dataclass(frozen=True)
@@ -25,6 +26,17 @@ class ModelConfig:
     lambda_contact    weight of future contact-mode prediction. Uses
                       simulator-defined labels, so it requires
                       ``contact_supervision: true`` to make that explicit.
+    lambda_recon      weight of reconstructing the *current* observation (a
+                      non-predictive auxiliary control; adds a head)
+    aux_stopgrad      prediction heads read a detached latent, so auxiliary
+                      losses are computed but cannot shape the representation
+    aux_core          prediction heads read a second temporal core that shares
+                      only the encoder with the policy; the action head never
+                      reads the predictive latent
+    use_prev_action   feed a_{t-1} to the encoder (False: zeroed input)
+    force_transform   ``none`` | ``log`` (signed log compression) | ``binary``
+                      (contact indicator only), applied to the raw force
+                      reading before standardisation, in training and rollout
     """
 
     kind: str = "world_model"
@@ -43,6 +55,11 @@ class ModelConfig:
     lambda_contact: float = 0.0
     contact_supervision: bool = False
     param_budget: int = 0
+    lambda_recon: float = 0.0
+    aux_stopgrad: bool = False
+    aux_core: bool = False
+    use_prev_action: bool = True
+    force_transform: str = "none"
 
     def __post_init__(self) -> None:
         if self.kind not in ("reactive", "sequence", "world_model"):
@@ -57,10 +74,14 @@ class ModelConfig:
                 "lambda_contact > 0 uses simulator contact labels; set contact_supervision: true "
                 "to mark this configuration as simulator-supervised"
             )
+        if self.force_transform not in FORCE_TRANSFORMS:
+            raise ValueError(f"unknown force_transform {self.force_transform!r}; choose from {FORCE_TRANSFORMS}")
         if self.kind != "world_model" and (self.lambda_obs or self.lambda_force or self.lambda_contact):
             object.__setattr__(self, "lambda_obs", 0.0)
             object.__setattr__(self, "lambda_force", 0.0)
             object.__setattr__(self, "lambda_contact", 0.0)
+        if self.kind != "world_model":
+            object.__setattr__(self, "lambda_recon", 0.0)
 
     def to_dict(self) -> dict:
         d = asdict(self)

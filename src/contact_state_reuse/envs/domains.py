@@ -40,6 +40,9 @@ class EpisodeParams:
     force_bias: float = 0.0  # fixed per-episode bias magnitude [N]
     force_delay: float = 0.0  # delay in control steps (rounded)
     force_dropout: float = 0.0  # per-step probability that the reading is zeroed
+    # added in v0.2 (appended so that existing domains draw identical random streams)
+    chamfer: float = 0.003  # 45-degree chamfer size at the slot entrance [m]
+    search_offset: float = 0.0  # extra lateral offset of the pose estimate, random sign [m]
 
     def to_dict(self) -> dict[str, float]:
         return asdict(self)
@@ -59,6 +62,8 @@ SOURCE: dict[str, Range] = {
     "force_bias": (0.0, 0.2),
     "force_delay": (0.0, 0.0),
     "force_dropout": (0.0, 0.0),
+    "chamfer": (0.003, 0.003),
+    "search_offset": (0.0, 0.0),
 }
 
 # Fully shifted ranges (severity = 1). Only the listed keys move.
@@ -73,21 +78,37 @@ SHIFTS: dict[str, dict[str, Range]] = {
         "force_dropout": (0.1, 0.1),
     },
     "occlusion": {"occlusion": (0.7, 0.9), "extero_noise": (0.0015, 0.0025)},
+    # v0.2 additions (not part of the original five evaluation domains)
+    # small_chamfer: much smaller entry chamfer, a geometry change used for the
+    #   adaptation test because it lowers zero-shot success of the trained models
+    "small_chamfer": {"chamfer": (0.0008, 0.0012)},
+    # search: second task. The pose estimate is offset laterally by 5 to 9 mm, so
+    #   the peg lands on the top face and has to find the opening by sliding.
+    "search": {"search_offset": (0.005, 0.009)},
 }
 
+# the original evaluation domains (v0.1); "mixed" samples only from these
+CORE_DOMAINS: tuple[str, ...] = ("source", "shifted_friction", "tight_clearance", "sensor_noise", "occlusion")
 DOMAINS: tuple[str, ...] = (*SHIFTS.keys(), "mixed")
 
 
 def domain_ranges(name: str, severity: float = 1.0) -> dict[str, Range]:
-    """Parameter ranges of a named domain at a given shift severity."""
-    if name not in SHIFTS:
-        raise ValueError(f"unknown domain {name!r}; choose from {DOMAINS}")
+    """Parameter ranges of a named domain at a given shift severity.
+
+    Composite domains join named shifts with ``+`` (for example
+    ``search+tight_clearance``); ``severity`` applies to every component.
+    """
+    parts = name.split("+")
+    for part in parts:
+        if part not in SHIFTS:
+            raise ValueError(f"unknown domain {part!r}; choose from {DOMAINS} (or join them with '+')")
     if not 0.0 <= severity <= 1.0:
         raise ValueError(f"severity must be in [0, 1], got {severity}")
     out = dict(SOURCE)
-    for key, (hi_lo, hi_hi) in SHIFTS[name].items():
-        lo, hi = SOURCE[key]
-        out[key] = (lo + severity * (hi_lo - lo), hi + severity * (hi_hi - hi))
+    for part in parts:
+        for key, (hi_lo, hi_hi) in SHIFTS[part].items():
+            lo, hi = SOURCE[key]
+            out[key] = (lo + severity * (hi_lo - lo), hi + severity * (hi_hi - hi))
     return out
 
 
@@ -96,7 +117,7 @@ def sample_params(rng: np.random.Generator, domain: str = "source", severity: fl
     used (for ``mixed`` this is one of the named domains, chosen uniformly)."""
     concrete = domain
     if domain == "mixed":
-        names = list(SHIFTS.keys())
+        names = list(CORE_DOMAINS)
         concrete = names[int(rng.integers(len(names)))]
     ranges = domain_ranges(concrete, severity)
     vals = {}

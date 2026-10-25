@@ -1,8 +1,8 @@
 """YAML configuration loading.
 
-Configs are plain YAML files. An experiment file may contain ``quick`` and
-``full`` sections that are deep-merged over its base keys, so one file
-documents both scales. Values are converted to typed dataclasses at the point
+Configs are plain YAML files. An experiment file may contain ``quick``,
+``medium`` and ``full`` sections that are deep-merged over its base keys, so
+one file documents every scale. Values are converted to typed dataclasses at the point
 of use (``EnvConfig``, ``ModelConfig``, ``TrainConfig`` ...), which validates
 field names and fails loudly on typos.
 """
@@ -17,6 +17,7 @@ from typing import Any, TypeVar
 import yaml
 
 T = TypeVar("T")
+SCALES = ("quick", "medium", "full")
 
 
 def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -35,17 +36,17 @@ def load_config(path: str | Path, scale: str | None = None) -> dict[str, Any]:
 
     Args:
         path: YAML file.
-        scale: ``None``, ``"quick"`` or ``"full"``.
+        scale: ``None``, ``"quick"``, ``"medium"`` or ``"full"``.
     """
     path = Path(path)
     if not path.exists():
         raise FileNotFoundError(f"config not found: {path}")
     with open(path) as f:
         cfg = yaml.safe_load(f) or {}
-    sections = {k: cfg.pop(k) for k in ("quick", "full") if k in cfg}
+    sections = {k: cfg.pop(k) for k in SCALES if k in cfg}
     if scale is not None:
-        if scale not in ("quick", "full"):
-            raise ValueError(f"scale must be 'quick' or 'full', got {scale!r}")
+        if scale not in SCALES:
+            raise ValueError(f"scale must be one of {SCALES}, got {scale!r}")
         cfg = deep_merge(cfg, sections.get(scale, {}))
     cfg["_scale"] = scale or "base"
     cfg["_source"] = str(path)
